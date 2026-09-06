@@ -180,6 +180,14 @@ def get_suggestions(comp_key, archive_id, table_col="winner", extra_defaults=Non
     all_suggestions.append("➕ Type Custom Entry...")
     return all_suggestions
 
+# VALUE RESOLVER HELPER (Fixes custom text input bugs)
+def resolve_input(select_key, custom_key):
+    sel_val = st.session_state.get(select_key)
+    cust_val = st.session_state.get(custom_key, "").strip()
+    if sel_val == "➕ Type Custom Entry..." or not sel_val:
+        return cust_val
+    return sel_val
+
 # TITLE COUNT ENGINE
 def get_total_titles_up_to(archive_id, comp_key, winner_name, record_id, sub_cat=None):
     base_count = BASELINES.get(comp_key, {}).get(winner_name, 0)
@@ -327,26 +335,15 @@ with p1:
         comp = st.session_state.get("intl_comp_select", "World Cup")
         curr_season = st.session_state.get("intl_season", "1998")
         
-        # Resolve Winner
-        sel_w = st.session_state.get("intl_win_sel")
-        w = st.session_state.get("intl_win_cust", "").strip() if sel_w == "➕ Type Custom Entry..." else sel_w
+        w = resolve_input("intl_win_sel", "intl_win_cust")
         
         if w:
             is_wc = (comp == "World Cup")
             is_finalissima = (comp == "Finalissima")
             
-            # Resolve Host
-            sel_h = st.session_state.get("intl_host_sel")
-            host_val = (st.session_state.get("intl_host_cust", "").strip() if sel_h == "➕ Type Custom Entry..." else sel_h) if is_wc else None
-            
-            # Resolve Runner-Up
-            sel_r = st.session_state.get("intl_run_sel")
-            runner_val = (st.session_state.get("intl_run_cust", "").strip() if sel_r == "➕ Type Custom Entry..." else sel_r) if (is_wc or is_finalissima) else None
-            
-            # Resolve 3rd Place
-            sel_t = st.session_state.get("intl_third_sel")
-            third_val = (st.session_state.get("intl_third_cust", "").strip() if sel_t == "➕ Type Custom Entry..." else sel_t) if is_wc else None
-            
+            host_val = resolve_input("intl_host_sel", "intl_host_cust") if is_wc else None
+            runner_val = resolve_input("intl_run_sel", "intl_run_cust") if (is_wc or is_finalissima) else None
+            third_val = resolve_input("intl_third_sel", "intl_third_cust") if is_wc else None
             score_val = st.session_state.get("intl_score", "2-1").strip() if (is_wc or is_finalissima) else None
             
             conn = get_connection()
@@ -364,7 +361,6 @@ with p1:
         selected_comp = st.selectbox("Tournament", ["World Cup", "Euro", "Copa America", "AFCON", "Asian Cup", "Finalissima"], key="intl_comp_select")
         st.text_input("Year / Season", key="intl_season")
         
-        # Autocomplete dropdown list
         nation_options = get_suggestions(selected_comp, active_archive_id)
         
         if selected_comp == "World Cup":
@@ -439,12 +435,8 @@ with p2:
     def log_ucl_callback():
         curr_season = st.session_state.get("ucl_season", "1998/99")
         
-        sel_w = st.session_state.get("ucl_win_sel")
-        w = st.session_state.get("ucl_win_cust", "").strip() if sel_w == "➕ Type Custom Entry..." else sel_w
-        
-        sel_r = st.session_state.get("ucl_run_sel")
-        r = st.session_state.get("ucl_run_cust", "").strip() if sel_r == "➕ Type Custom Entry..." else sel_r
-        
+        w = resolve_input("ucl_win_sel", "ucl_win_cust")
+        r = resolve_input("ucl_run_sel", "ucl_run_cust")
         score = st.session_state.get("ucl_score", "2-1").strip()
         
         if w:
@@ -507,8 +499,7 @@ with p3:
         s_k = f"s_{l_key}"
         curr_season = st.session_state.get(s_k, "1998/99")
         
-        sel_w = st.session_state.get(f"w_sel_{l_key}")
-        w = st.session_state.get(f"w_cust_{l_key}", "").strip() if sel_w == "➕ Type Custom Entry..." else sel_w
+        w = resolve_input(f"w_sel_{l_key}", f"w_cust_{l_key}")
         
         if w:
             conn = get_connection()
@@ -571,14 +562,9 @@ with p4:
     def log_ballon_callback():
         curr_yr_str = str(st.session_state.get("b_yr", "1999")).strip()
         
-        sel_p = st.session_state.get("b_play_sel")
-        p = st.session_state.get("b_play_cust", "").strip() if sel_p == "➕ Type Custom Entry..." else sel_p
-        
-        sel_c = st.session_state.get("b_club_sel")
-        c_val = st.session_state.get("b_club_cust", "").strip() if sel_c == "➕ Type Custom Entry..." else sel_c
-        
-        sel_n = st.session_state.get("b_nat_sel")
-        n_val = st.session_state.get("b_nat_cust", "").strip() if sel_n == "➕ Type Custom Entry..." else sel_n
+        p = resolve_input("b_play_sel", "b_play_cust")
+        c_val = resolve_input("b_club_sel", "b_club_cust")
+        n_val = resolve_input("b_nat_sel", "b_nat_cust")
         
         if p:
             pos_str = ", ".join(st.session_state.get("b_pos_select", ["ST"]))
