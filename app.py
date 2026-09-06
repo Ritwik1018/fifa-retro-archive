@@ -38,7 +38,7 @@ def init_db():
                     FOREIGN KEY(archive_id) REFERENCES archives(id) ON DELETE CASCADE
                 )''')
 
-    # Safe Schema Migration for existing databases
+    # Schema Migration Check
     c.execute("PRAGMA table_info(trophy_logs)")
     columns = [column[1] for column in c.fetchall()]
     if "host_nation" not in columns:
@@ -58,7 +58,7 @@ def init_db():
                     FOREIGN KEY(archive_id) REFERENCES archives(id) ON DELETE CASCADE
                 )''')
 
-    # Key Events / Timeline Logs
+    # Timeline Logs
     c.execute('''CREATE TABLE IF NOT EXISTS timeline_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     archive_id INTEGER NOT NULL,
@@ -68,7 +68,7 @@ def init_db():
                     FOREIGN KEY(archive_id) REFERENCES archives(id) ON DELETE CASCADE
                 )''')
 
-    # Seed Default Archive if empty
+    # Seed Default Archive
     c.execute("SELECT COUNT(*) FROM archives")
     if c.fetchone()[0] == 0:
         c.execute("INSERT INTO archives (name, start_year) VALUES (?, ?)", ("Default 1998 Save", 1998))
@@ -76,44 +76,50 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Historical Baselines (Pre-1998/99)
+# EXPANDED HISTORICAL BASELINES
 BASELINES = {
-    "World Cup": {"Brazil": 4, "Italy": 3, "Germany": 3, "Uruguay": 2, "Argentina": 2, "England": 1},
-    "Euro": {"Germany": 3, "France": 1, "Netherlands": 1, "Denmark": 1, "Spain": 1, "Italy": 1, "Soviet Union": 1, "Czechoslovakia": 1},
-    "Copa America": {"Argentina": 14, "Uruguay": 14, "Brazil": 5, "Paraguay": 2, "Peru": 2, "Bolivia": 1},
-    "AFCON": {"Ghana": 4, "Egypt": 4, "Cameroon": 2, "Nigeria": 2, "DR Congo": 2, "Ivory Coast": 1, "South Africa": 1, "Morocco": 1, "Algeria": 1, "Ethiopia": 1, "Sudan": 1, "Congo": 1},
-    "Asian Cup": {"Iran": 3, "Saudi Arabia": 3, "South Korea": 2, "Japan": 1, "Kuwait": 1, "Israel": 1},
+    "World Cup": {"Brazil": 4, "Italy": 3, "Germany": 3, "Uruguay": 2, "Argentina": 2, "England": 1, "France": 1},
+    "Euro": {"Germany": 3, "France": 2, "Netherlands": 1, "Denmark": 1, "Spain": 1, "Italy": 1, "Soviet Union": 1, "Czechoslovakia": 1, "Portugal": 0, "Greece": 0},
+    "Copa America": {"Argentina": 14, "Uruguay": 14, "Brazil": 5, "Paraguay": 2, "Peru": 2, "Bolivia": 1, "Colombia": 0, "Chile": 0},
+    "AFCON": {"Ghana": 4, "Egypt": 4, "Cameroon": 2, "Nigeria": 2, "DR Congo": 2, "Ivory Coast": 1, "South Africa": 1, "Morocco": 1, "Algeria": 1, "Ethiopia": 1, "Sudan": 1, "Congo": 1, "Senegal": 0, "Zambia": 0, "Tunisia": 0},
+    "Asian Cup": {"Iran": 3, "Saudi Arabia": 3, "South Korea": 2, "Japan": 1, "Kuwait": 1, "Israel": 1, "Qatar": 0, "Australia": 0},
     "Finalissima": {"France": 1, "Argentina": 1},
     "UCL": {
         "Real Madrid": 7, "AC Milan": 5, "Liverpool": 4, "Ajax": 4, "Bayern Munich": 3,
         "Inter Milan": 2, "Benfica": 2, "Nottingham Forest": 2, "Juventus": 2, "Porto": 1,
         "Manchester United": 1, "Aston Villa": 1, "Celtic": 1, "Feyenoord": 1, "Hamburger SV": 1,
-        "Steaua Bucuresti": 1, "PSV Eindhoven": 1, "Red Star Belgrade": 1, "Barcelona": 1, "Marseille": 1, "Borussia Dortmund": 1
+        "Steaua Bucuresti": 1, "PSV Eindhoven": 1, "Red Star Belgrade": 1, "Barcelona": 1, "Marseille": 1, 
+        "Borussia Dortmund": 1, "Chelsea": 0, "Manchester City": 0, "Paris Saint-Germain": 0, "Arsenal": 0, "Atletico Madrid": 0
     },
     "EPL": {
         "Liverpool": 18, "Manchester United": 11, "Arsenal": 11, "Everton": 9, "Aston Villa": 7,
         "Sunderland": 6, "Newcastle United": 4, "Sheffield Wednesday": 4, "Blackburn Rovers": 3,
         "Huddersfield Town": 3, "Wolverhampton": 3, "Leeds United": 3, "Preston North End": 2,
         "Portsmouth": 2, "Burnley": 2, "Tottenham Hotspur": 2, "Manchester City": 2, "Derby County": 2,
-        "Sheffield United": 1, "West Bromwich Albion": 1, "Chelsea": 1, "Ipswich Town": 1, "Nottingham Forest": 1
+        "Sheffield United": 1, "West Bromwich Albion": 1, "Chelsea": 1, "Ipswich Town": 1, "Nottingham Forest": 1,
+        "Leicester City": 0, "West Ham United": 0, "Southampton": 0, "Crystal Palace": 0, "Fulham": 0, "Brighton": 0
     },
     "La Liga": {
         "Real Madrid": 27, "Barcelona": 15, "Atletico Madrid": 9, "Athletic Bilbao": 8,
-        "Valencia": 4, "Real Sociedad": 2, "Real Betis": 1, "Sevilla": 1
+        "Valencia": 4, "Real Sociedad": 2, "Real Betis": 1, "Sevilla": 1, "Deportivo La Coruña": 0,
+        "Villarreal": 0, "RCD Espanyol": 0, "RCD Mallorca": 0, "Real Zaragoza": 0, "Girona": 0, "Celta Vigo": 0
     },
     "Bundesliga": {
         "Bayern Munich": 14, "Nurnberg": 9, "Schalke 04": 7, "Hamburger SV": 6, "Borussia Dortmund": 5,
         "Borussia Monchengladbach": 5, "VfB Stuttgart": 4, "1. FC Kaiserslautern": 4, "Werder Bremen": 3,
         "1. FC Koln": 3, "Greuther Furth": 3, "VfB Leipzig": 3, "Hertha BSC": 2, "Dresdner SC": 2, "Hannover 96": 2,
-        "Eintracht Frankfurt": 1, "TSV 1860 Munich": 1, "Eintracht Braunschweig": 1
+        "Eintracht Frankfurt": 1, "TSV 1860 Munich": 1, "Eintracht Braunschweig": 1, "VfL Wolfsburg": 0, "Bayer Leverkusen": 0,
+        "RB Leipzig": 0, "SC Freiburg": 0, "TSG 1899 Hoffenheim": 0, "Union Berlin": 0
     },
     "Serie A": {
         "Juventus": 25, "AC Milan": 15, "Inter Milan": 13, "Genoa": 9, "Bologna": 7, "Pro Vercelli": 7,
-        "Torino": 7, "Roma": 2, "Napoli": 2, "Fiorentina": 2, "Lazio": 1, "Cagliari": 1, "Sampdoria": 1, "Hellas Verona": 1
+        "Torino": 7, "Roma": 2, "Napoli": 2, "Fiorentina": 2, "Lazio": 1, "Cagliari": 1, "Sampdoria": 1, "Hellas Verona": 1,
+        "Atalanta": 0, "Udinese": 0, "Sassuolo": 0, "Parma": 0
     },
     "Ligue 1": {
         "Saint-Etienne": 10, "Marseille": 8, "Nantes": 7, "Monaco": 6, "Reims": 6, "Bordeaux": 4,
-        "Nice": 4, "Paris Saint-Germain": 2, "Sochaux": 2, "Sete": 2, "Lille": 2, "Lens": 1, "Auxerre": 1, "Strasbourg": 1
+        "Nice": 4, "Paris Saint-Germain": 2, "Sochaux": 2, "Sete": 2, "Lille": 2, "Lens": 1, "Auxerre": 1, "Strasbourg": 1,
+        "Olympique Lyonnais": 0, "Montpellier": 0, "Rennes": 0, "Toulouse": 0
     },
     "Ballon d'Or": {
         "Johan Cruyff": 3, "Michel Platini": 3, "Marco van Basten": 3, "Alfredo Di Stefano": 2,
@@ -122,11 +128,12 @@ BASELINES = {
         "Lev Yashin": 1, "Denis Law": 1, "Eusebio": 1, "Bobby Charlton": 1, "Florian Albert": 1,
         "George Best": 1, "Gianni Rivera": 1, "Gerd Muller": 1, "Oleg Blokhin": 1, "Allan Simonsen": 1,
         "Paolo Rossi": 1, "Igor Belanov": 1, "Ruud Gullit": 1, "Lothar Matthaus": 1, "Jean-Pierre Papin": 1,
-        "Roberto Baggio": 1, "Hristo Stoichkov": 1, "George Weah": 1, "Matthias Sammer": 1, "Zinedine Zidane": 1
+        "Roberto Baggio": 1, "Hristo Stoichkov": 1, "George Weah": 1, "Matthias Sammer": 1, "Zinedine Zidane": 1,
+        "Pavel Nedved": 0, "Andriy Shevchenko": 0, "Ronaldinho": 0, "Kaka": 0, "Lionel Messi": 0, "Cristiano Ronaldo": 0, "Luka Modric": 0, "Karim Benzema": 0, "Rodri": 0
     }
 }
 
-# AUTO-INCREMENT HELPER FUNCTION
+# AUTO-INCREMENT HELPER
 def increment_season_string(season_str, years_to_add=1):
     season_str = str(season_str).strip()
     match_slash = re.match(r"^(\d{4})/(\d{2})$", season_str)
@@ -150,7 +157,30 @@ def get_ordinal(n):
         suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
     return f"{n}{suffix}"
 
-# FIXED GET TOTAL TITLES FUNCTION
+# DYNAMIC AUTO-COMPLETE SUGGESTIONS FETCH
+def get_suggestions(comp_key, archive_id, table_col="winner", extra_defaults=None):
+    if extra_defaults is None:
+        extra_defaults = []
+    
+    base_teams = list(BASELINES.get(comp_key, {}).keys())
+    
+    conn = get_connection()
+    c = conn.cursor()
+    if comp_key == "Ballon d'Or":
+        c.execute("SELECT DISTINCT player_name FROM ballon_dor_logs WHERE archive_id=?", (archive_id,))
+    elif comp_key in ["EPL", "La Liga", "Bundesliga", "Serie A", "Ligue 1"]:
+        c.execute(f"SELECT DISTINCT {table_col} FROM trophy_logs WHERE archive_id=? AND sub_category=?", (archive_id, comp_key))
+    else:
+        c.execute(f"SELECT DISTINCT {table_col} FROM trophy_logs WHERE archive_id=? AND competition_type=?", (archive_id, comp_key))
+        
+    db_results = [r[0] for r in c.fetchall() if r[0]]
+    conn.close()
+    
+    all_suggestions = sorted(list(set(base_teams + extra_defaults + db_results)))
+    all_suggestions.append("➕ Type Custom Entry...")
+    return all_suggestions
+
+# TITLE COUNT ENGINE
 def get_total_titles_up_to(archive_id, comp_key, winner_name, record_id, sub_cat=None):
     base_count = BASELINES.get(comp_key, {}).get(winner_name, 0)
     conn = get_connection()
@@ -160,7 +190,6 @@ def get_total_titles_up_to(archive_id, comp_key, winner_name, record_id, sub_cat
         c.execute("SELECT COUNT(*) FROM ballon_dor_logs WHERE archive_id=? AND player_name=? AND id <= ?", (archive_id, winner_name, record_id))
     else:
         if sub_cat:
-            # Matches 'Domestic League' rows with matching sub_category and archive_id
             c.execute("SELECT COUNT(*) FROM trophy_logs WHERE archive_id=? AND competition_type='Domestic League' AND sub_category=? AND winner=? AND id <= ?", 
                       (archive_id, sub_cat, winner_name, record_id))
         else:
@@ -172,21 +201,19 @@ def get_total_titles_up_to(archive_id, comp_key, winner_name, record_id, sub_cat
     return base_count + in_save_count
 
 # ==========================================
-# PAGE LAYOUT & HEADER CONTROLS
+# STREAMLIT UI & HEADER CONTROLS
 # ==========================================
 st.set_page_config(page_title="FIFA Retro Archive Hub", layout="wide")
 init_db()
 
 st.title("⚽ FIFA RETRO ARCHIVE HUB")
 
-# Fetch Archives
 conn = get_connection()
 archives_df = pd.read_sql_query("SELECT * FROM archives", conn)
 conn.close()
 
 archive_options = {row['name']: (row['id'], row['start_year']) for _, row in archives_df.iterrows()}
 
-# TOP CONTROL STRIP
 col_sel, col_new, col_sys = st.columns([3, 1.5, 2])
 
 with col_sel:
@@ -198,7 +225,6 @@ with col_sel:
     )
     active_archive_id, active_start_year = archive_options[selected_archive_name]
 
-# Callback for New Archive creation
 def create_archive_cb():
     name = st.session_state.get("new_archive_name_input", "").strip()
     year = st.session_state.get("new_archive_year_input", 1998)
@@ -221,7 +247,7 @@ with col_new:
         st.button("Create Archive", on_click=create_archive_cb, use_container_width=True)
 
 with col_sys:
-    with st.popover("⚙️ SYSTEM MANAGER (App-Wide)"):
+    with st.popover("⚙️ SYSTEM MANAGER"):
         st.subheader("App-Wide Management")
         sys_tab1, sys_tab2, sys_tab3 = st.tabs(["✏️ Edit Archive", "🗑️ Delete Archive", "💾 Backup & Restore"])
         
@@ -242,7 +268,7 @@ with col_sys:
         with sys_tab2:
             target_del_name = st.selectbox("Select Archive to Delete", options=list(archive_options.keys()), key="del_arch_sel")
             target_del_id, _ = archive_options[target_del_name]
-            confirm_del = st.checkbox(f"Confirm deletion of '{target_del_name}' and ALL its records?", key="chk_del_arch")
+            confirm_del = st.checkbox(f"Confirm deletion of '{target_del_name}'?", key="chk_del_arch")
             if st.button("🗑️ Permanently Delete Archive", key="btn_del_arch", type="primary"):
                 if confirm_del:
                     conn = get_connection()
@@ -252,8 +278,6 @@ with col_sys:
                     conn.close()
                     st.success(f"Deleted '{target_del_name}'!")
                     st.rerun()
-                else:
-                    st.warning("Check the confirmation box first.")
 
         with sys_tab3:
             st.markdown("**Master App Backup & Restore**")
@@ -265,22 +289,20 @@ with col_sys:
                     mime="application/x-sqlite3",
                     use_container_width=True
                 )
-            
             st.divider()
-            st.markdown("**Restore / Import Database**")
             uploaded_db = st.file_uploader("Upload a .db Backup File", type=["db"])
             if uploaded_db is not None:
-                if st.button("Overwrite Current Database with Upload", type="primary"):
+                if st.button("Overwrite Database with Upload", type="primary"):
                     with open(DB_FILE, "wb") as f:
                         f.write(uploaded_db.getbuffer())
-                    st.success("Database restored successfully!")
+                    st.success("Database restored!")
                     st.rerun()
 
 st.caption(f"Currently Active: **{selected_archive_name}** | Baseline Era: **{active_start_year}**")
 st.divider()
 
 # ==========================================
-# MAIN 6-PAGE CONTENT NAVIGATION
+# MAIN NAVIGATION (6 TABS)
 # ==========================================
 p1, p2, p3, p4, p5, p6 = st.tabs([
     "1. International", 
@@ -296,26 +318,36 @@ p1, p2, p3, p4, p5, p6 = st.tabs([
 # ------------------------------------------
 with p1:
     st.header("🏆 International Tournaments")
-    
     col_entry, col_view = st.columns([1.2, 2])
     
-    for k, d in [("intl_season", "1998"), ("intl_host", ""), ("intl_win", ""), ("intl_run", ""), ("intl_third", ""), ("intl_score", "2-1")]:
-        if k not in st.session_state:
-            st.session_state[k] = d
+    if "intl_season" not in st.session_state:
+        st.session_state["intl_season"] = "1998"
 
     def log_intl_callback():
-        w = st.session_state.get("intl_win", "").strip()
         comp = st.session_state.get("intl_comp_select", "World Cup")
         curr_season = st.session_state.get("intl_season", "1998")
+        
+        # Resolve Winner
+        sel_w = st.session_state.get("intl_win_sel")
+        w = st.session_state.get("intl_win_cust", "").strip() if sel_w == "➕ Type Custom Entry..." else sel_w
         
         if w:
             is_wc = (comp == "World Cup")
             is_finalissima = (comp == "Finalissima")
             
-            host_val = st.session_state.get("intl_host", "").strip() if is_wc else None
-            runner_val = st.session_state.get("intl_run", "").strip() if (is_wc or is_finalissima) else None
-            third_val = st.session_state.get("intl_third", "").strip() if is_wc else None
-            score_val = st.session_state.get("intl_score", "").strip() if (is_wc or is_finalissima) else None
+            # Resolve Host
+            sel_h = st.session_state.get("intl_host_sel")
+            host_val = (st.session_state.get("intl_host_cust", "").strip() if sel_h == "➕ Type Custom Entry..." else sel_h) if is_wc else None
+            
+            # Resolve Runner-Up
+            sel_r = st.session_state.get("intl_run_sel")
+            runner_val = (st.session_state.get("intl_run_cust", "").strip() if sel_r == "➕ Type Custom Entry..." else sel_r) if (is_wc or is_finalissima) else None
+            
+            # Resolve 3rd Place
+            sel_t = st.session_state.get("intl_third_sel")
+            third_val = (st.session_state.get("intl_third_cust", "").strip() if sel_t == "➕ Type Custom Entry..." else sel_t) if is_wc else None
+            
+            score_val = st.session_state.get("intl_score", "2-1").strip() if (is_wc or is_finalissima) else None
             
             conn = get_connection()
             c = conn.cursor()
@@ -326,30 +358,48 @@ with p1:
             conn.close()
             
             st.session_state["intl_season"] = increment_season_string(curr_season, years_to_add=4)
-            st.session_state["intl_host"] = ""
-            st.session_state["intl_win"] = ""
-            st.session_state["intl_run"] = ""
-            st.session_state["intl_third"] = ""
-            st.session_state["intl_score"] = "2-1"
 
     with col_entry:
         st.subheader("Log Tournament Result")
         selected_comp = st.selectbox("Tournament", ["World Cup", "Euro", "Copa America", "AFCON", "Asian Cup", "Finalissima"], key="intl_comp_select")
         st.text_input("Year / Season", key="intl_season")
-        st.caption("ℹ️ *Logging a result automatically increments the next tournament year by +4.*")
+        
+        # Autocomplete dropdown list
+        nation_options = get_suggestions(selected_comp, active_archive_id)
         
         if selected_comp == "World Cup":
-            st.text_input("Host Nation", key="intl_host")
-            st.text_input("Champion", key="intl_win")
-            st.text_input("Runner-Up", key="intl_run")
-            st.text_input("3rd Place", key="intl_third")
-            st.text_input("Final Scoreline", key="intl_score")
+            sel_host = st.selectbox("Host Nation", nation_options, key="intl_host_sel")
+            if sel_host == "➕ Type Custom Entry...":
+                st.text_input("Type Custom Host Nation", key="intl_host_cust")
+                
+            sel_win = st.selectbox("Champion", nation_options, key="intl_win_sel")
+            if sel_win == "➕ Type Custom Entry...":
+                st.text_input("Type Custom Champion", key="intl_win_cust")
+                
+            sel_run = st.selectbox("Runner-Up", nation_options, key="intl_run_sel")
+            if sel_run == "➕ Type Custom Entry...":
+                st.text_input("Type Custom Runner-Up", key="intl_run_cust")
+                
+            sel_third = st.selectbox("3rd Place", nation_options, key="intl_third_sel")
+            if sel_third == "➕ Type Custom Entry...":
+                st.text_input("Type Custom 3rd Place", key="intl_third_cust")
+                
+            st.text_input("Final Scoreline", value="2-1", key="intl_score")
+            
         elif selected_comp == "Finalissima":
-            st.text_input("Winner / Champion", key="intl_win")
-            st.text_input("Runner-Up", key="intl_run")
-            st.text_input("Final Scoreline", key="intl_score")
+            sel_win = st.selectbox("Winner / Champion", nation_options, key="intl_win_sel")
+            if sel_win == "➕ Type Custom Entry...":
+                st.text_input("Type Custom Champion", key="intl_win_cust")
+                
+            sel_run = st.selectbox("Runner-Up", nation_options, key="intl_run_sel")
+            if sel_run == "➕ Type Custom Entry...":
+                st.text_input("Type Custom Runner-Up", key="intl_run_cust")
+                
+            st.text_input("Final Scoreline", value="2-1", key="intl_score")
         else:
-            st.text_input("Champion", key="intl_win")
+            sel_win = st.selectbox("Champion", nation_options, key="intl_win_sel")
+            if sel_win == "➕ Type Custom Entry...":
+                st.text_input("Type Custom Champion", key="intl_win_cust")
         
         st.button("Log International Result", on_click=log_intl_callback, use_container_width=True)
 
@@ -357,18 +407,7 @@ with p1:
         st.subheader(f"Recorded {selected_comp} History")
         conn = get_connection()
         intl_df = pd.read_sql_query(
-            """SELECT id,
-                      season AS Season, 
-                      competition_type AS Tournament, 
-                      host_nation AS Host,
-                      winner AS Champion, 
-                      runner_up AS 'Runner-Up', 
-                      third_place AS '3rd Place',
-                      score AS Score 
-               FROM trophy_logs 
-               WHERE archive_id=? 
-                 AND competition_type = ? 
-               ORDER BY id DESC""", 
+            "SELECT id, season AS Season, competition_type AS Tournament, host_nation AS Host, winner AS Champion, runner_up AS 'Runner-Up', third_place AS '3rd Place', score AS Score FROM trophy_logs WHERE archive_id=? AND competition_type = ? ORDER BY id DESC", 
             conn, params=(active_archive_id, selected_comp)
         )
         conn.close()
@@ -377,7 +416,6 @@ with p1:
             intl_df['Total Titles'] = intl_df.apply(
                 lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, r['Tournament'], r['Champion'], r['id']))} Title", axis=1
             )
-            
             display_cols = ['Season', 'Champion', 'Total Titles']
             if intl_df['Host'].notna().any(): display_cols.append('Host')
             if intl_df['Runner-Up'].notna().any(): display_cols.append('Runner-Up')
@@ -395,33 +433,46 @@ with p2:
     st.header("🇪🇺 UEFA Champions League")
     col_e2, col_v2 = st.columns([1.2, 2])
     
-    for k, d in [("ucl_season", "1998/99"), ("ucl_win", ""), ("ucl_run", ""), ("ucl_score", "2-1")]:
-        if k not in st.session_state:
-            st.session_state[k] = d
+    if "ucl_season" not in st.session_state:
+        st.session_state["ucl_season"] = "1998/99"
 
     def log_ucl_callback():
-        w = st.session_state.get("ucl_win", "").strip()
         curr_season = st.session_state.get("ucl_season", "1998/99")
+        
+        sel_w = st.session_state.get("ucl_win_sel")
+        w = st.session_state.get("ucl_win_cust", "").strip() if sel_w == "➕ Type Custom Entry..." else sel_w
+        
+        sel_r = st.session_state.get("ucl_run_sel")
+        r = st.session_state.get("ucl_run_cust", "").strip() if sel_r == "➕ Type Custom Entry..." else sel_r
+        
+        score = st.session_state.get("ucl_score", "2-1").strip()
+        
         if w:
             conn = get_connection()
             c = conn.cursor()
             c.execute('''INSERT INTO trophy_logs (archive_id, season, competition_type, winner, runner_up, score)
                          VALUES (?, ?, 'UCL', ?, ?, ?)''', 
-                      (active_archive_id, curr_season, w, st.session_state.get("ucl_run", "").strip(), st.session_state.get("ucl_score", "").strip()))
+                      (active_archive_id, curr_season, w, r, score))
             conn.commit()
             conn.close()
             
             st.session_state["ucl_season"] = increment_season_string(curr_season, years_to_add=1)
-            st.session_state["ucl_win"] = ""
-            st.session_state["ucl_run"] = ""
-            st.session_state["ucl_score"] = "2-1"
 
     with col_e2:
         st.subheader("Log UCL Final")
         st.text_input("Season", key="ucl_season")
-        st.text_input("UCL Champion", key="ucl_win")
-        st.text_input("Runner-Up", key="ucl_run")
-        st.text_input("Scoreline", key="ucl_score")
+        
+        ucl_options = get_suggestions("UCL", active_archive_id)
+        
+        sel_w = st.selectbox("UCL Champion", ucl_options, key="ucl_win_sel")
+        if sel_w == "➕ Type Custom Entry...":
+            st.text_input("Type Custom Champion", key="ucl_win_cust")
+            
+        sel_r = st.selectbox("Runner-Up", ucl_options, key="ucl_run_sel")
+        if sel_r == "➕ Type Custom Entry...":
+            st.text_input("Type Custom Runner-Up", key="ucl_run_cust")
+            
+        st.text_input("Scoreline", value="2-1", key="ucl_score")
         
         st.button("Log UCL Result", on_click=log_ucl_callback, use_container_width=True)
 
@@ -453,9 +504,12 @@ with p3:
     league_keys = ["EPL", "La Liga", "Bundesliga", "Serie A", "Ligue 1"]
     
     def log_league_callback(l_key):
-        s_k, w_k = f"s_{l_key}", f"w_{l_key}"
-        w = st.session_state.get(w_k, "").strip()
+        s_k = f"s_{l_key}"
         curr_season = st.session_state.get(s_k, "1998/99")
+        
+        sel_w = st.session_state.get(f"w_sel_{l_key}")
+        w = st.session_state.get(f"w_cust_{l_key}", "").strip() if sel_w == "➕ Type Custom Entry..." else sel_w
+        
         if w:
             conn = get_connection()
             c = conn.cursor()
@@ -466,22 +520,23 @@ with p3:
             conn.close()
             
             st.session_state[s_k] = increment_season_string(curr_season, years_to_add=1)
-            st.session_state[w_k] = ""
 
     for tab, l_key in zip(league_tabs, league_keys):
         with tab:
             cl1, cl2 = st.columns([1.2, 2])
             
-            s_k, w_k = f"s_{l_key}", f"w_{l_key}"
+            s_k = f"s_{l_key}"
             if s_k not in st.session_state:
                 st.session_state[s_k] = "1998/99"
-            if w_k not in st.session_state:
-                st.session_state[w_k] = ""
 
             with cl1:
                 st.subheader(f"Log {l_key} Winner")
                 st.text_input("Season", key=s_k)
-                st.text_input("League Champion", key=w_k)
+                
+                dom_options = get_suggestions(l_key, active_archive_id)
+                sel_w = st.selectbox("League Champion", dom_options, key=f"w_sel_{l_key}")
+                if sel_w == "➕ Type Custom Entry...":
+                    st.text_input("Type Custom Champion", key=f"w_cust_{l_key}")
                 
                 st.button(f"Log {l_key} Result", key=f"btn_{l_key}", on_click=log_league_callback, args=(l_key,), use_container_width=True)
 
@@ -508,38 +563,55 @@ with p3:
 # ------------------------------------------
 with p4:
     st.header("🥇 Ballon d'Or Ledger")
-    
     col_b1, col_b2 = st.columns([1.2, 2])
     
-    for k, d in [("b_yr", "1999"), ("b_play", ""), ("b_club", ""), ("b_nat", "")]:
-        if k not in st.session_state:
-            st.session_state[k] = d
+    if "b_yr" not in st.session_state:
+        st.session_state["b_yr"] = "1999"
 
     def log_ballon_callback():
-        p = st.session_state.get("b_play", "").strip()
         curr_yr_str = str(st.session_state.get("b_yr", "1999")).strip()
+        
+        sel_p = st.session_state.get("b_play_sel")
+        p = st.session_state.get("b_play_cust", "").strip() if sel_p == "➕ Type Custom Entry..." else sel_p
+        
+        sel_c = st.session_state.get("b_club_sel")
+        c_val = st.session_state.get("b_club_cust", "").strip() if sel_c == "➕ Type Custom Entry..." else sel_c
+        
+        sel_n = st.session_state.get("b_nat_sel")
+        n_val = st.session_state.get("b_nat_cust", "").strip() if sel_n == "➕ Type Custom Entry..." else sel_n
+        
         if p:
             pos_str = ", ".join(st.session_state.get("b_pos_select", ["ST"]))
             conn = get_connection()
             c = conn.cursor()
             c.execute('''INSERT INTO ballon_dor_logs (archive_id, year, player_name, positions, club, nation)
                          VALUES (?, ?, ?, ?, ?, ?)''',
-                      (active_archive_id, int(curr_yr_str) if curr_yr_str.isdigit() else 1999, p, pos_str, st.session_state.get("b_club", "").strip(), st.session_state.get("b_nat", "").strip()))
+                      (active_archive_id, int(curr_yr_str) if curr_yr_str.isdigit() else 1999, p, pos_str, c_val, n_val))
             conn.commit()
             conn.close()
             
             st.session_state["b_yr"] = increment_season_string(curr_yr_str, years_to_add=1)
-            st.session_state["b_play"] = ""
-            st.session_state["b_club"] = ""
-            st.session_state["b_nat"] = ""
 
     with col_b1:
         st.subheader("Log Ballon d'Or Winner")
         st.text_input("Year", key="b_yr")
-        st.text_input("Player Name", key="b_play")
+        
+        player_options = get_suggestions("Ballon d'Or", active_archive_id)
+        sel_p = st.selectbox("Player Name", player_options, key="b_play_sel")
+        if sel_p == "➕ Type Custom Entry...":
+            st.text_input("Type Custom Player Name", key="b_play_cust")
+            
         st.multiselect("Positions Played", ["ST", "CF", "RW", "LW", "AM", "CM", "DM", "CB", "LB", "RB", "GK"], default=["ST"], key="b_pos_select")
-        st.text_input("Club", key="b_club")
-        st.text_input("Nation", key="b_nat")
+        
+        club_options = get_suggestions("UCL", active_archive_id)
+        sel_c = st.selectbox("Club", club_options, key="b_club_sel")
+        if sel_c == "➕ Type Custom Entry...":
+            st.text_input("Type Custom Club", key="b_club_cust")
+            
+        nation_options = get_suggestions("World Cup", active_archive_id)
+        sel_n = st.selectbox("Nation", nation_options, key="b_nat_sel")
+        if sel_n == "➕ Type Custom Entry...":
+            st.text_input("Type Custom Nation", key="b_nat_cust")
         
         st.button("Log Ballon d'Or", on_click=log_ballon_callback, use_container_width=True)
 
@@ -567,7 +639,6 @@ with p4:
 # ------------------------------------------
 with p5:
     st.header("📖 Career Timeline & Narrative Events")
-    
     col_t1, col_t2 = st.columns([1.2, 2])
     
     if "t_season" not in st.session_state:
@@ -593,7 +664,6 @@ with p5:
         st.subheader("Log Event / Storyline")
         st.text_input("Season / Year", key="t_season")
         st.text_area("Event Description & Notes", key="t_details")
-        
         st.button("Add Event to Timeline", on_click=add_timeline_callback, use_container_width=True)
 
     with col_t2:
@@ -615,7 +685,6 @@ with p5:
 # ------------------------------------------
 with p6:
     st.header(f"✏️ Active Save Data Editor ({selected_archive_name})")
-    
     ed_tab1, ed_tab2, ed_tab3 = st.tabs(["Trophies Editor", "Ballon d'Or Editor", "Timeline Editor"])
     
     conn = get_connection()
@@ -626,7 +695,6 @@ with p6:
         trophies_df = pd.read_sql_query("SELECT id, season, competition_type, sub_category, winner, runner_up, score FROM trophy_logs WHERE archive_id=?", conn, params=(active_archive_id,))
         if not trophies_df.empty:
             sel_row_id = st.selectbox("Select Record ID", options=trophies_df['id'].tolist(), format_func=lambda x: f"ID {x}: {trophies_df[trophies_df['id']==x]['competition_type'].values[0]} ({trophies_df[trophies_df['id']==x]['season'].values[0]}) - {trophies_df[trophies_df['id']==x]['winner'].values[0]}")
-            
             row_data = trophies_df[trophies_df['id'] == sel_row_id].iloc[0]
             
             e_winner = st.text_input("Edit Winner", value=row_data['winner'])
@@ -654,7 +722,6 @@ with p6:
         b_edit_df = pd.read_sql_query("SELECT id, year, player_name, positions, club, nation FROM ballon_dor_logs WHERE archive_id=?", conn, params=(active_archive_id,))
         if not b_edit_df.empty:
             sel_b_id = st.selectbox("Select Ballon d'Or ID", options=b_edit_df['id'].tolist(), format_func=lambda x: f"ID {x}: {b_edit_df[b_edit_df['id']==x]['year'].values[0]} - {b_edit_df[b_edit_df['id']==x]['player_name'].values[0]}")
-            
             brow_data = b_edit_df[b_edit_df['id'] == sel_b_id].iloc[0]
             
             eb_player = st.text_input("Edit Player Name", value=brow_data['player_name'])
@@ -682,7 +749,6 @@ with p6:
         t_edit_df = pd.read_sql_query("SELECT id, season, event_details FROM timeline_logs WHERE archive_id=?", conn, params=(active_archive_id,))
         if not t_edit_df.empty:
             sel_t_id = st.selectbox("Select Timeline ID", options=t_edit_df['id'].tolist(), format_func=lambda x: f"ID {x}: {t_edit_df[t_edit_df['id']==x]['season'].values[0]}")
-            
             trow_data = t_edit_df[t_edit_df['id'] == sel_t_id].iloc[0]
             
             et_season = st.text_input("Edit Season", value=trow_data['season'])
