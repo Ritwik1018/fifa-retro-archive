@@ -127,22 +127,22 @@ BASELINES = {
 }
 
 # AUTO-INCREMENT HELPER FUNCTION
-def increment_season_string(season_str):
+def increment_season_string(season_str, years_to_add=1):
     """
-    Increments '2008/09' to '2009/10', '1998/99' to '1999/00', 
-    or single year strings like '2008' to '2009'.
+    Increments dual-year formats like '2008/09' to '2009/10',
+    or single year strings like '1998' to '2002' (if years_to_add=4).
     """
     season_str = str(season_str).strip()
     match_slash = re.match(r"^(\d{4})/(\d{2})$", season_str)
     if match_slash:
         start_year = int(match_slash.group(1))
-        next_start = start_year + 1
+        next_start = start_year + years_to_add
         next_end = (next_start + 1) % 100
         return f"{next_start}/{next_end:02d}"
     
     match_single = re.match(r"^(\d{4})$", season_str)
     if match_single:
-        return str(int(match_single.group(1)) + 1)
+        return str(int(match_single.group(1)) + years_to_add)
         
     return season_str
 
@@ -327,8 +327,8 @@ with p1:
             conn.commit()
             conn.close()
             
-            # Increment season automatically
-            st.session_state["intl_season"] = increment_season_string(curr_season)
+            # Increment year by +4 for quadrennial tournaments
+            st.session_state["intl_season"] = increment_season_string(curr_season, years_to_add=4)
             st.session_state["intl_host"] = ""
             st.session_state["intl_win"] = ""
             st.session_state["intl_run"] = ""
@@ -339,6 +339,7 @@ with p1:
         st.subheader("Log Tournament Result")
         selected_comp = st.selectbox("Tournament", ["World Cup", "Euro", "Copa America", "AFCON", "Asian Cup", "Finalissima"], key="intl_comp_select")
         st.text_input("Year / Season", key="intl_season")
+        st.caption("ℹ️ *Logging a result automatically increments the next tournament year by +4.*")
         
         if selected_comp == "World Cup":
             st.text_input("Host Nation", key="intl_host")
@@ -413,8 +414,8 @@ with p2:
             conn.commit()
             conn.close()
             
-            # Increment season automatically (e.g. 2008/09 -> 2009/10)
-            st.session_state["ucl_season"] = increment_season_string(curr_season)
+            # Increment season automatically (+1 year)
+            st.session_state["ucl_season"] = increment_season_string(curr_season, years_to_add=1)
             st.session_state["ucl_win"] = ""
             st.session_state["ucl_run"] = ""
             st.session_state["ucl_score"] = "2-1"
@@ -468,8 +469,8 @@ with p3:
             conn.commit()
             conn.close()
             
-            # Increment season automatically
-            st.session_state[s_k] = increment_season_string(curr_season)
+            # Increment domestic season automatically (+1 year)
+            st.session_state[s_k] = increment_season_string(curr_season, years_to_add=1)
             st.session_state[w_k] = ""
             st.session_state[r_k] = ""
 
@@ -519,32 +520,32 @@ with p4:
     
     col_b1, col_b2 = st.columns([1.2, 2])
     
-    for k, d in [("b_yr", 1999), ("b_play", ""), ("b_club", ""), ("b_nat", "")]:
+    for k, d in [("b_yr", "1999"), ("b_play", ""), ("b_club", ""), ("b_nat", "")]:
         if k not in st.session_state:
             st.session_state[k] = d
 
     def log_ballon_callback():
         p = st.session_state.get("b_play", "").strip()
-        curr_yr = st.session_state.get("b_yr", 1999)
+        curr_yr_str = str(st.session_state.get("b_yr", "1999")).strip()
         if p:
             pos_str = ", ".join(st.session_state.get("b_pos_select", ["ST"]))
             conn = get_connection()
             c = conn.cursor()
             c.execute('''INSERT INTO ballon_dor_logs (archive_id, year, player_name, positions, club, nation)
                          VALUES (?, ?, ?, ?, ?, ?)''',
-                      (active_archive_id, curr_yr, p, pos_str, st.session_state.get("b_club", "").strip(), st.session_state.get("b_nat", "").strip()))
+                      (active_archive_id, int(curr_yr_str) if curr_yr_str.isdigit() else 1999, p, pos_str, st.session_state.get("b_club", "").strip(), st.session_state.get("b_nat", "").strip()))
             conn.commit()
             conn.close()
             
-            # Increment year automatically
-            st.session_state["b_yr"] = curr_yr + 1
+            # Increment Ballon d'Or year automatically (+1 year)
+            st.session_state["b_yr"] = increment_season_string(curr_yr_str, years_to_add=1)
             st.session_state["b_play"] = ""
             st.session_state["b_club"] = ""
             st.session_state["b_nat"] = ""
 
     with col_b1:
         st.subheader("Log Ballon d'Or Winner")
-        st.number_input("Year", step=1, key="b_yr")
+        st.text_input("Year", key="b_yr")
         st.text_input("Player Name", key="b_play")
         st.multiselect("Positions Played", ["ST", "CF", "RW", "LW", "AM", "CM", "DM", "CB", "LB", "RB", "GK"], default=["ST"], key="b_pos_select")
         st.text_input("Club", key="b_club")
@@ -595,8 +596,8 @@ with p5:
             conn.commit()
             conn.close()
             
-            # Increment season automatically
-            st.session_state["t_season"] = increment_season_string(curr_season)
+            # Increment season automatically (+1 year)
+            st.session_state["t_season"] = increment_season_string(curr_season, years_to_add=1)
             st.session_state["t_details"] = ""
 
     with col_t1:
