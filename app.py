@@ -290,19 +290,26 @@ with p1:
         
         if w:
             is_wc = (comp == "World Cup")
+            is_finalissima = (comp == "Finalissima")
+            
+            # Determine fields to record
+            host_val = st.session_state.get("intl_host", "").strip() if is_wc else None
+            runner_val = st.session_state.get("intl_run", "").strip() if (is_wc or is_finalissima) else None
+            third_val = st.session_state.get("intl_third", "").strip() if is_wc else None
+            score_val = st.session_state.get("intl_score", "").strip() if (is_wc or is_finalissima) else None
+            
             conn = get_connection()
             c = conn.cursor()
-            
             c.execute('''INSERT INTO trophy_logs (archive_id, season, competition_type, winner, runner_up, score, third_place, host_nation)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', 
                       (active_archive_id, 
                        st.session_state.get("intl_season", ""), 
                        comp, 
                        w, 
-                       st.session_state.get("intl_run", "").strip() if is_wc else None, 
-                       st.session_state.get("intl_score", "").strip() if is_wc else None, 
-                       st.session_state.get("intl_third", "").strip() if is_wc else None, 
-                       st.session_state.get("intl_host", "").strip() if is_wc else None))
+                       runner_val, 
+                       score_val, 
+                       third_val, 
+                       host_val))
             conn.commit()
             conn.close()
             
@@ -316,13 +323,21 @@ with p1:
         st.subheader("Log Tournament Result")
         selected_comp = st.selectbox("Tournament", ["World Cup", "Euro", "Copa America", "AFCON", "Asian Cup", "Finalissima"], key="intl_comp_select")
         st.text_input("Year / Season", key="intl_season")
-        st.text_input("Champion", key="intl_win")
         
+        # Display inputs conditionally
         if selected_comp == "World Cup":
             st.text_input("Host Nation", key="intl_host")
+            st.text_input("Champion", key="intl_win")
             st.text_input("Runner-Up", key="intl_run")
             st.text_input("3rd Place", key="intl_third")
             st.text_input("Final Scoreline", key="intl_score")
+        elif selected_comp == "Finalissima":
+            st.text_input("Winner / Champion", key="intl_win")
+            st.text_input("Runner-Up", key="intl_run")
+            st.text_input("Final Scoreline", key="intl_score")
+        else:
+            # Euro, Copa America, AFCON, Asian Cup
+            st.text_input("Champion", key="intl_win")
         
         st.button("Log International Result", on_click=log_intl_callback, use_container_width=True)
 
