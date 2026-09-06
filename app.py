@@ -133,20 +133,20 @@ def get_ordinal(n):
         suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
     return f"{n}{suffix}"
 
-def get_total_titles(archive_id, comp_key, winner_name, sub_cat=None):
+def get_total_titles_up_to(archive_id, comp_key, winner_name, record_id, sub_cat=None):
     base_count = BASELINES.get(comp_key, {}).get(winner_name, 0)
     conn = get_connection()
     c = conn.cursor()
     
     if comp_key == "Ballon d'Or":
-        c.execute("SELECT COUNT(*) FROM ballon_dor_logs WHERE archive_id=? AND player_name=?", (archive_id, winner_name))
+        c.execute("SELECT COUNT(*) FROM ballon_dor_logs WHERE archive_id=? AND player_name=? AND id <= ?", (archive_id, winner_name, record_id))
     else:
         if sub_cat:
-            c.execute("SELECT COUNT(*) FROM trophy_logs WHERE archive_id=? AND competition_type=? AND sub_category=? AND winner=?", 
-                      (archive_id, comp_key, sub_cat, winner_name))
+            c.execute("SELECT COUNT(*) FROM trophy_logs WHERE archive_id=? AND competition_type=? AND sub_category=? AND winner=? AND id <= ?", 
+                      (archive_id, comp_key, sub_cat, winner_name, record_id))
         else:
-            c.execute("SELECT COUNT(*) FROM trophy_logs WHERE archive_id=? AND competition_type=? AND winner=?", 
-                      (archive_id, comp_key, winner_name))
+            c.execute("SELECT COUNT(*) FROM trophy_logs WHERE archive_id=? AND competition_type=? AND winner=? AND id <= ?", 
+                      (archive_id, comp_key, winner_name, record_id))
             
     in_save_count = c.fetchone()[0]
     conn.close()
@@ -345,7 +345,8 @@ with p1:
         st.subheader(f"Recorded {selected_comp} History")
         conn = get_connection()
         intl_df = pd.read_sql_query(
-            """SELECT season AS Season, 
+            """SELECT id,
+                      season AS Season, 
                       competition_type AS Tournament, 
                       host_nation AS Host,
                       winner AS Champion, 
@@ -362,10 +363,9 @@ with p1:
         
         if not intl_df.empty:
             intl_df['Total Titles'] = intl_df.apply(
-                lambda r: f"{get_ordinal(get_total_titles(active_archive_id, r['Tournament'], r['Champion']))} Title", axis=1
+                lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, r['Tournament'], r['Champion'], r['id']))} Title", axis=1
             )
             
-            # Filter output columns based on populated fields for the specific tournament
             display_cols = ['Season', 'Champion', 'Total Titles']
             if intl_df['Host'].notna().any(): display_cols.append('Host')
             if intl_df['Runner-Up'].notna().any(): display_cols.append('Runner-Up')
@@ -415,16 +415,17 @@ with p2:
         st.subheader("Champions League Archive")
         conn = get_connection()
         ucl_df = pd.read_sql_query(
-            "SELECT season AS Season, winner AS Champion, runner_up AS 'Runner-Up', score AS Score FROM trophy_logs WHERE archive_id=? AND competition_type='UCL' ORDER BY id DESC",
+            "SELECT id, season AS Season, winner AS Champion, runner_up AS 'Runner-Up', score AS Score FROM trophy_logs WHERE archive_id=? AND competition_type='UCL' ORDER BY id DESC",
             conn, params=(active_archive_id,)
         )
         conn.close()
         
         if not ucl_df.empty:
             ucl_df['Total Titles'] = ucl_df.apply(
-                lambda r: f"{get_ordinal(get_total_titles(active_archive_id, 'UCL', r['Champion']))} UCL Title", axis=1
+                lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, 'UCL', r['Champion'], r['id']))} UCL Title", axis=1
             )
-            st.dataframe(ucl_df, use_container_width=True, hide_index=True)
+            display_ucl = ucl_df[['Season', 'Champion', 'Runner-Up', 'Score', 'Total Titles']]
+            st.dataframe(display_ucl, use_container_width=True, hide_index=True)
         else:
             st.info("No Champions League results logged yet.")
 
@@ -476,16 +477,17 @@ with p3:
                 st.subheader(f"{l_key} History Log")
                 conn = get_connection()
                 dom_df = pd.read_sql_query(
-                    "SELECT season AS Season, winner AS Champion, runner_up AS 'Runner-Up' FROM trophy_logs WHERE archive_id=? AND competition_type='Domestic League' AND sub_category=? ORDER BY id DESC",
+                    "SELECT id, season AS Season, winner AS Champion, runner_up AS 'Runner-Up' FROM trophy_logs WHERE archive_id=? AND competition_type='Domestic League' AND sub_category=? ORDER BY id DESC",
                     conn, params=(active_archive_id, l_key)
                 )
                 conn.close()
                 
                 if not dom_df.empty:
                     dom_df['Total Titles'] = dom_df.apply(
-                        lambda r: f"{get_ordinal(get_total_titles(active_archive_id, l_key, r['Champion'], sub_cat=l_key))} Title", axis=1
+                        lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, l_key, r['Champion'], r['id'], sub_cat=l_key))} Title", axis=1
                     )
-                    st.dataframe(dom_df, use_container_width=True, hide_index=True)
+                    display_dom = dom_df[['Season', 'Champion', 'Runner-Up', 'Total Titles']]
+                    st.dataframe(display_dom, use_container_width=True, hide_index=True)
                 else:
                     st.info(f"No {l_key} titles logged yet.")
 
@@ -531,7 +533,7 @@ with p4:
         st.subheader("Ballon d'Or History")
         conn = get_connection()
         b_df = pd.read_sql_query(
-            "SELECT year AS Year, player_name AS Winner, positions AS Positions, club AS Club, nation AS Nation FROM ballon_dor_logs WHERE archive_id=? ORDER BY year DESC",
+            "SELECT id, year AS Year, player_name AS Winner, positions AS Positions, club AS Club, nation AS Nation FROM ballon_dor_logs WHERE archive_id=? ORDER BY year DESC",
             conn, params=(active_archive_id,)
         )
         conn.close()
@@ -539,9 +541,10 @@ with p4:
         if not b_df.empty:
             b_award_name = "Ballon d'Or"
             b_df["Total Ballon d'Ors"] = b_df.apply(
-                lambda r: f"{get_ordinal(get_total_titles(active_archive_id, b_award_name, r['Winner']))} Win", axis=1
+                lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, b_award_name, r['Winner'], r['id']))} Win", axis=1
             )
-            st.dataframe(b_df, use_container_width=True, hide_index=True)
+            display_b = b_df[['Year', 'Winner', 'Positions', 'Club', 'Nation', "Total Ballon d'Ors"]]
+            st.dataframe(display_b, use_container_width=True, hide_index=True)
         else:
             st.info("No Ballon d'Or winners logged yet.")
 
