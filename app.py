@@ -276,7 +276,7 @@ p1, p2, p3, p4, p5, p6 = st.tabs([
 # PAGE 1: INTERNATIONAL TOURNAMENTS
 # ------------------------------------------
 with p1:
-    st.header("🏆 International Tournaments (4-Year Cycle)")
+    st.header("🏆 International Tournaments")
     
     col_entry, col_view = st.columns([1.2, 2])
     
@@ -286,19 +286,23 @@ with p1:
 
     def log_intl_callback():
         w = st.session_state.get("intl_win", "").strip()
+        comp = st.session_state.get("intl_comp_select", "World Cup")
+        
         if w:
+            is_wc = (comp == "World Cup")
             conn = get_connection()
             c = conn.cursor()
+            
             c.execute('''INSERT INTO trophy_logs (archive_id, season, competition_type, winner, runner_up, score, third_place, host_nation)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', 
                       (active_archive_id, 
                        st.session_state.get("intl_season", ""), 
-                       st.session_state.get("intl_comp_select", "World Cup"), 
+                       comp, 
                        w, 
-                       st.session_state.get("intl_run", "").strip(), 
-                       st.session_state.get("intl_score", "").strip(), 
-                       st.session_state.get("intl_third", "").strip(), 
-                       st.session_state.get("intl_host", "").strip()))
+                       st.session_state.get("intl_run", "").strip() if is_wc else None, 
+                       st.session_state.get("intl_score", "").strip() if is_wc else None, 
+                       st.session_state.get("intl_third", "").strip() if is_wc else None, 
+                       st.session_state.get("intl_host", "").strip() if is_wc else None))
             conn.commit()
             conn.close()
             
@@ -310,13 +314,15 @@ with p1:
 
     with col_entry:
         st.subheader("Log Tournament Result")
-        st.selectbox("Tournament", ["World Cup", "Euro", "Copa America", "AFCON", "Asian Cup", "Finalissima"], key="intl_comp_select")
+        selected_comp = st.selectbox("Tournament", ["World Cup", "Euro", "Copa America", "AFCON", "Asian Cup", "Finalissima"], key="intl_comp_select")
         st.text_input("Year / Season", key="intl_season")
-        st.text_input("Host Nation", key="intl_host")
         st.text_input("Champion", key="intl_win")
-        st.text_input("Runner-Up", key="intl_run")
-        st.text_input("3rd Place", key="intl_third")
-        st.text_input("Final Scoreline", key="intl_score")
+        
+        if selected_comp == "World Cup":
+            st.text_input("Host Nation", key="intl_host")
+            st.text_input("Runner-Up", key="intl_run")
+            st.text_input("3rd Place", key="intl_third")
+            st.text_input("Final Scoreline", key="intl_score")
         
         st.button("Log International Result", on_click=log_intl_callback, use_container_width=True)
 
@@ -343,7 +349,14 @@ with p1:
             intl_df['Total Titles'] = intl_df.apply(
                 lambda r: f"{get_ordinal(get_total_titles(active_archive_id, r['Tournament'], r['Champion']))} Title", axis=1
             )
-            st.dataframe(intl_df, use_container_width=True, hide_index=True)
+            
+            display_cols = ['Season', 'Tournament', 'Champion', 'Total Titles']
+            if intl_df['Host'].notna().any(): display_cols.append('Host')
+            if intl_df['Runner-Up'].notna().any(): display_cols.append('Runner-Up')
+            if intl_df['3rd Place'].notna().any(): display_cols.append('3rd Place')
+            if intl_df['Score'].notna().any(): display_cols.append('Score')
+            
+            st.dataframe(intl_df[display_cols], use_container_width=True, hide_index=True)
         else:
             st.info("No international results logged yet in this save.")
 
