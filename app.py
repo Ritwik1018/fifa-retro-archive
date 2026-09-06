@@ -1,21 +1,17 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-import re
 
 # ==========================================
-# DATABASE INITIALIZATION & BASELINES
+# 1. DATABASE INITIALIZATION & MIGRATION
 # ==========================================
 DB_FILE = "fifa_retro_archive.db"
 
-def get_connection():
-    return sqlite3.connect(DB_FILE, check_same_thread=False)
-
 def init_db():
-    conn = get_connection()
+    conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
-    # Global Archives Metadata
+    # Archives Table
     c.execute('''CREATE TABLE IF NOT EXISTS archives (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT UNIQUE NOT NULL,
@@ -23,7 +19,7 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )''')
 
-    # Trophy Logs
+    # Trophy Logs Table
     c.execute('''CREATE TABLE IF NOT EXISTS trophy_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     archive_id INTEGER NOT NULL,
@@ -38,15 +34,7 @@ def init_db():
                     FOREIGN KEY(archive_id) REFERENCES archives(id) ON DELETE CASCADE
                 )''')
 
-    # Safe Schema Migration for existing databases
-    c.execute("PRAGMA table_info(trophy_logs)")
-    columns = [column[1] for column in c.fetchall()]
-    if "host_nation" not in columns:
-        c.execute("ALTER TABLE trophy_logs ADD COLUMN host_nation TEXT")
-    if "third_place" not in columns:
-        c.execute("ALTER TABLE trophy_logs ADD COLUMN third_place TEXT")
-
-    # Ballon d'Or Logs
+    # Ballon d'Or Table
     c.execute('''CREATE TABLE IF NOT EXISTS ballon_dor_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     archive_id INTEGER NOT NULL,
@@ -58,7 +46,7 @@ def init_db():
                     FOREIGN KEY(archive_id) REFERENCES archives(id) ON DELETE CASCADE
                 )''')
 
-    # Key Events / Timeline Logs
+    # Timeline Logs Table
     c.execute('''CREATE TABLE IF NOT EXISTS timeline_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     archive_id INTEGER NOT NULL,
@@ -68,650 +56,465 @@ def init_db():
                     FOREIGN KEY(archive_id) REFERENCES archives(id) ON DELETE CASCADE
                 )''')
 
+    # Schema Migrations
+    c.execute("PRAGMA table_info(trophy_logs)")
+    columns = [col[1] for col in c.fetchall()]
+    if "third_place" not in columns:
+        c.execute("ALTER TABLE trophy_logs ADD COLUMN third_place TEXT")
+    if "host_nation" not in columns:
+        c.execute("ALTER TABLE trophy_logs ADD COLUMN host_nation TEXT")
+
     # Seed Default Archive if empty
     c.execute("SELECT COUNT(*) FROM archives")
     if c.fetchone()[0] == 0:
-        c.execute("INSERT INTO archives (name, start_year) VALUES (?, ?)", ("Default 1998 Save", 1998))
+        c.execute("INSERT INTO archives (name, start_year) VALUES (?, ?)", ("Default Retro Career", 1998))
     
     conn.commit()
     conn.close()
 
-# Historical Baselines (Pre-1998/99)
-BASELINES = {
-    "World Cup": {"Brazil": 4, "Italy": 3, "Germany": 3, "Uruguay": 2, "Argentina": 2, "England": 1},
-    "Euro": {"Germany": 3, "France": 1, "Netherlands": 1, "Denmark": 1, "Spain": 1, "Italy": 1, "Soviet Union": 1, "Czechoslovakia": 1},
-    "Copa America": {"Argentina": 14, "Uruguay": 14, "Brazil": 5, "Paraguay": 2, "Peru": 2, "Bolivia": 1},
-    "AFCON": {"Ghana": 4, "Egypt": 4, "Cameroon": 2, "Nigeria": 2, "DR Congo": 2, "Ivory Coast": 1, "South Africa": 1, "Morocco": 1, "Algeria": 1, "Ethiopia": 1, "Sudan": 1, "Congo": 1},
-    "Asian Cup": {"Iran": 3, "Saudi Arabia": 3, "South Korea": 2, "Japan": 1, "Kuwait": 1, "Israel": 1},
-    "Finalissima": {"France": 1, "Argentina": 1},
-    "UCL": {
-        "Real Madrid": 7, "AC Milan": 5, "Liverpool": 4, "Ajax": 4, "Bayern Munich": 3,
-        "Inter Milan": 2, "Benfica": 2, "Nottingham Forest": 2, "Juventus": 2, "Porto": 1,
-        "Manchester United": 1, "Aston Villa": 1, "Celtic": 1, "Feyenoord": 1, "Hamburger SV": 1,
-        "Steaua Bucuresti": 1, "PSV Eindhoven": 1, "Red Star Belgrade": 1, "Barcelona": 1, "Marseille": 1, "Borussia Dortmund": 1
-    },
-    "EPL": {
-        "Liverpool": 18, "Manchester United": 11, "Arsenal": 11, "Everton": 9, "Aston Villa": 7,
-        "Sunderland": 6, "Newcastle United": 4, "Sheffield Wednesday": 4, "Blackburn Rovers": 3,
-        "Huddersfield Town": 3, "Wolverhampton": 3, "Leeds United": 3, "Preston North End": 2,
-        "Portsmouth": 2, "Burnley": 2, "Tottenham Hotspur": 2, "Manchester City": 2, "Derby County": 2,
-        "Sheffield United": 1, "West Bromwich Albion": 1, "Chelsea": 1, "Ipswich Town": 1, "Nottingham Forest": 1
-    },
-    "La Liga": {
-        "Real Madrid": 27, "Barcelona": 15, "Atletico Madrid": 9, "Athletic Bilbao": 8,
-        "Valencia": 4, "Real Sociedad": 2, "Real Betis": 1, "Sevilla": 1
-    },
-    "Bundesliga": {
-        "Bayern Munich": 14, "Nurnberg": 9, "Schalke 04": 7, "Hamburger SV": 6, "Borussia Dortmund": 5,
-        "Borussia Monchengladbach": 5, "VfB Stuttgart": 4, "1. FC Kaiserslautern": 4, "Werder Bremen": 3,
-        "1. FC Koln": 3, "Greuther Furth": 3, "VfB Leipzig": 3, "Hertha BSC": 2, "Dresdner SC": 2, "Hannover 96": 2,
-        "Eintracht Frankfurt": 1, "TSV 1860 Munich": 1, "Eintracht Braunschweig": 1
-    },
-    "Serie A": {
-        "Juventus": 25, "AC Milan": 15, "Inter Milan": 13, "Genoa": 9, "Bologna": 7, "Pro Vercelli": 7,
-        "Torino": 7, "Roma": 2, "Napoli": 2, "Fiorentina": 2, "Lazio": 1, "Cagliari": 1, "Sampdoria": 1, "Hellas Verona": 1
-    },
-    "Ligue 1": {
-        "Saint-Etienne": 10, "Marseille": 8, "Nantes": 7, "Monaco": 6, "Reims": 6, "Bordeaux": 4,
-        "Nice": 4, "Paris Saint-Germain": 2, "Sochaux": 2, "Sete": 2, "Lille": 2, "Lens": 1, "Auxerre": 1, "Strasbourg": 1
-    },
-    "Ballon d'Or": {
-        "Johan Cruyff": 3, "Michel Platini": 3, "Marco van Basten": 3, "Alfredo Di Stefano": 2,
-        "Franz Beckenbauer": 2, "Kevin Keegan": 2, "Karl-Heinz Rummenigge": 2, "Ronaldo Nazario": 1,
-        "Stanley Matthews": 1, "Raymond Kopa": 1, "Luis Suarez": 1, "Omar Sivori": 1, "Josef Masopust": 1,
-        "Lev Yashin": 1, "Denis Law": 1, "Eusebio": 1, "Bobby Charlton": 1, "Florian Albert": 1,
-        "George Best": 1, "Gianni Rivera": 1, "Gerd Muller": 1, "Oleg Blokhin": 1, "Allan Simonsen": 1,
-        "Paolo Rossi": 1, "Igor Belanov": 1, "Ruud Gullit": 1, "Lothar Matthaus": 1, "Jean-Pierre Papin": 1,
-        "Roberto Baggio": 1, "Hristo Stoichkov": 1, "George Weah": 1, "Matthias Sammer": 1, "Zinedine Zidane": 1
-    }
-}
-
-# AUTO-INCREMENT HELPER FUNCTION
-def increment_season_string(season_str, years_to_add=1):
-    """
-    Increments dual-year formats like '2008/09' to '2009/10',
-    or single year strings like '1998' to '2002' (if years_to_add=4).
-    """
-    season_str = str(season_str).strip()
-    match_slash = re.match(r"^(\d{4})/(\d{2})$", season_str)
-    if match_slash:
-        start_year = int(match_slash.group(1))
-        next_start = start_year + years_to_add
-        next_end = (next_start + 1) % 100
-        return f"{next_start}/{next_end:02d}"
-    
-    match_single = re.match(r"^(\d{4})$", season_str)
-    if match_single:
-        return str(int(match_single.group(1)) + years_to_add)
-        
-    return season_str
-
-# Ordinal Helper Function
-def get_ordinal(n):
-    if 11 <= (n % 100) <= 13:
-        suffix = 'th'
-    else:
-        suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
-    return f"{n}{suffix}"
-
-def get_total_titles_up_to(archive_id, comp_key, winner_name, record_id, sub_cat=None):
-    base_count = BASELINES.get(comp_key, {}).get(winner_name, 0)
-    conn = get_connection()
-    c = conn.cursor()
-    
-    if comp_key == "Ballon d'Or":
-        c.execute("SELECT COUNT(*) FROM ballon_dor_logs WHERE archive_id=? AND player_name=? AND id <= ?", (archive_id, winner_name, record_id))
-    else:
-        if sub_cat:
-            c.execute("SELECT COUNT(*) FROM trophy_logs WHERE archive_id=? AND competition_type=? AND sub_category=? AND winner=? AND id <= ?", 
-                      (archive_id, comp_key, sub_cat, winner_name, record_id))
-        else:
-            c.execute("SELECT COUNT(*) FROM trophy_logs WHERE archive_id=? AND competition_type=? AND winner=? AND id <= ?", 
-                      (archive_id, comp_key, winner_name, record_id))
-            
-    in_save_count = c.fetchone()[0]
-    conn.close()
-    return base_count + in_save_count
-
-# ==========================================
-# PAGE LAYOUT & HEADER CONTROLS
-# ==========================================
-st.set_page_config(page_title="FIFA Retro Archive Hub", layout="wide")
 init_db()
 
-st.title("⚽ FIFA RETRO ARCHIVE HUB")
+# ==========================================
+# 2. HELPER FUNCTIONS & DB OPERATIONS
+# ==========================================
+def get_db():
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-# Fetch Archives
-conn = get_connection()
-archives_df = pd.read_sql_query("SELECT * FROM archives", conn)
-conn.close()
+def get_archives():
+    conn = get_db()
+    archives = conn.execute("SELECT * FROM archives ORDER BY created_at DESC").fetchall()
+    conn.close()
+    return archives
 
-archive_options = {row['name']: (row['id'], row['start_year']) for _, row in archives_df.iterrows()}
+def add_archive(name, start_year):
+    conn = get_db()
+    try:
+        conn.execute("INSERT INTO archives (name, start_year) VALUES (?, ?)", (name, start_year))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
 
-# TOP CONTROL STRIP
-col_sel, col_new, col_sys = st.columns([3, 1.5, 2])
+def generate_seasons(start_year, count=30):
+    return [f"{start_year + i}/{str(start_year + i + 1)[-2:]}" for i in range(count)]
 
-with col_sel:
-    selected_archive_name = st.selectbox(
-        "Active Save Archive",
-        options=list(archive_options.keys()),
-        index=0 if len(archive_options) > 0 else None,
-        label_visibility="collapsed"
-    )
-    active_archive_id, active_start_year = archive_options[selected_archive_name]
+def generate_years(start_year, count=30):
+    return [start_year + i for i in range(count)]
 
-# Callback for New Archive creation
-def create_archive_cb():
-    name = st.session_state.get("new_archive_name_input", "").strip()
-    year = st.session_state.get("new_archive_year_input", 1998)
-    if name:
-        try:
-            conn = get_connection()
-            c = conn.cursor()
-            c.execute("INSERT INTO archives (name, start_year) VALUES (?, ?)", (name, year))
-            conn.commit()
-            conn.close()
-            st.session_state["new_archive_name_input"] = ""
-        except sqlite3.IntegrityError:
-            pass
+# ==========================================
+# 3. STREAMLIT APP LAYOUT & CONFIG
+# ==========================================
+st.set_page_config(page_title="FIFA Retro Career Archive", page_icon="⚽", layout="wide")
 
-with col_new:
-    with st.popover("➕ New Save"):
-        st.subheader("Create New Save Archive")
-        st.text_input("Archive Name", key="new_archive_name_input")
-        st.number_input("Start Era Year", value=1998, step=1, key="new_archive_year_input")
-        st.button("Create Archive", on_click=create_archive_cb, use_container_width=True)
+st.title("⚽ FIFA Retro Career Mode Archive")
 
-with col_sys:
-    with st.popover("⚙️ SYSTEM MANAGER (App-Wide)"):
-        st.subheader("App-Wide Management")
-        sys_tab1, sys_tab2, sys_tab3 = st.tabs(["✏️ Edit Archive", "🗑️ Delete Archive", "💾 Backup & Restore"])
-        
-        with sys_tab1:
-            target_edit_name = st.selectbox("Select Archive to Edit", options=list(archive_options.keys()), key="edit_arch_sel")
-            target_id, target_curr_year = archive_options[target_edit_name]
-            updated_name = st.text_input("New Name", value=target_edit_name)
-            updated_year = st.number_input("New Start Year", value=target_curr_year, step=1)
-            if st.button("Save Changes", key="btn_edit_arch"):
-                conn = get_connection()
-                c = conn.cursor()
-                c.execute("UPDATE archives SET name=?, start_year=? WHERE id=?", (updated_name, updated_year, target_id))
-                conn.commit()
-                conn.close()
-                st.success("Archive updated!")
+# Sidebar - Archive Selector & Management
+st.sidebar.header("📁 Save File Manager")
+archives = get_archives()
+archive_names = [a["name"] for a in archives]
+
+selected_archive_name = st.sidebar.selectbox("Select Active Save File", archive_names)
+active_archive = next(a for a in archives if a["name"] == selected_archive_name)
+
+st.sidebar.markdown("---")
+with st.sidebar.expander("➕ Create New Save File"):
+    new_name = st.text_input("Save File Name")
+    new_start_year = st.number_input("Start Year", min_value=1990, max_value=2030, value=1998, step=1)
+    if st.button("Create Save"):
+        if new_name.strip():
+            if add_archive(new_name.strip(), new_start_year):
+                st.success("Save file created successfully!")
                 st.rerun()
+            else:
+                st.error("A save file with this name already exists.")
+        else:
+            st.error("Please enter a valid save name.")
 
-        with sys_tab2:
-            target_del_name = st.selectbox("Select Archive to Delete", options=list(archive_options.keys()), key="del_arch_sel")
-            target_del_id, _ = archive_options[target_del_name]
-            confirm_del = st.checkbox(f"Confirm deletion of '{target_del_name}' and ALL its records?", key="chk_del_arch")
-            if st.button("🗑️ Permanently Delete Archive", key="btn_del_arch", type="primary"):
-                if confirm_del:
-                    conn = get_connection()
-                    c = conn.cursor()
-                    c.execute("DELETE FROM archives WHERE id=?", (target_del_id,))
-                    conn.commit()
-                    conn.close()
-                    st.success(f"Deleted '{target_del_name}'!")
-                    st.rerun()
-                else:
-                    st.warning("Check the confirmation box first.")
+st.sidebar.info(f"**Active Save:** {active_archive['name']}\n\n**Start Year:** {active_archive['start_year']}")
 
-        with sys_tab3:
-            st.markdown("**Master App Backup & Restore**")
-            with open(DB_FILE, "rb") as fp:
-                st.download_button(
-                    label="⬇️ Download Entire Database (.db)",
-                    data=fp,
-                    file_name="fifa_retro_archive.db",
-                    mime="application/x-sqlite3",
-                    use_container_width=True
-                )
-            
-            st.divider()
-            st.markdown("**Restore / Import Database**")
-            uploaded_db = st.file_uploader("Upload a .db Backup File", type=["db"])
-            if uploaded_db is not None:
-                if st.button("Overwrite Current Database with Upload", type="primary"):
-                    with open(DB_FILE, "wb") as f:
-                        f.write(uploaded_db.getbuffer())
-                    st.success("Database restored successfully!")
-                    st.rerun()
+# Data Options
+COMPETITION_TYPES = [
+    "Domestic Leagues", 
+    "Domestic Cups", 
+    "European Competitions", 
+    "International Tournaments"
+]
 
-st.caption(f"Currently Active: **{selected_archive_name}** | Baseline Era: **{active_start_year}**")
-st.divider()
+LEAGUE_OPTIONS = [
+    "Premier League", "La Liga", "Serie A", "Bundesliga", 
+    "Ligue 1", "Eredivisie", "Primeira Liga", "Custom/Other League"
+]
+
+CUP_OPTIONS = [
+    "FA Cup", "EFL Cup", "Copa del Rey", "Coppa Italia", 
+    "DFB-Pokal", "Coupe de France", "Custom/Other Domestic Cup"
+]
+
+EURO_OPTIONS = [
+    "UEFA Champions League", "UEFA Europa League / UEFA Cup", 
+    "UEFA Conference League", "UEFA Super Cup"
+]
+
+INTL_OPTIONS = [
+    "FIFA World Cup", "UEFA European Championship (Euros)", 
+    "Copa América", "AFC Asian Cup", "AFCON"
+]
+
+SEASONS = generate_seasons(active_archive["start_year"])
+YEARS = generate_years(active_archive["start_year"])
 
 # ==========================================
-# MAIN 6-PAGE CONTENT NAVIGATION
+# 4. TAB NAVIGATION
 # ==========================================
-p1, p2, p3, p4, p5, p6 = st.tabs([
-    "1. International", 
-    "2. Champions League", 
-    "3. Domestic Leagues", 
-    "4. Ballon d'Or", 
-    "5. Timeline & Events", 
-    "6. Active Save Data Editor"
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🏆 Log Trophies", 
+    "🥇 Ballon d'Or", 
+    "📜 Timeline / Lore", 
+    "📊 Career Database & Stats",
+    "⚙️ Manage Logged Records"
 ])
 
 # ------------------------------------------
-# PAGE 1: INTERNATIONAL TOURNAMENTS
+# TAB 1: LOG TROPHIES
 # ------------------------------------------
-with p1:
-    st.header("🏆 International Tournaments")
+with tab1:
+    st.header("🏆 Log Season Competition Result")
     
-    col_entry, col_view = st.columns([1.2, 2])
+    col1, col2 = st.columns(2)
+    with col1:
+        comp_type = st.selectbox("Competition Category", COMPETITION_TYPES, key="t1_type")
+        season = st.selectbox("Season", SEASONS, key="t1_season")
     
-    for k, d in [("intl_season", "1998"), ("intl_host", ""), ("intl_win", ""), ("intl_run", ""), ("intl_third", ""), ("intl_score", "2-1")]:
-        if k not in st.session_state:
-            st.session_state[k] = d
-
-    def log_intl_callback():
-        w = st.session_state.get("intl_win", "").strip()
-        comp = st.session_state.get("intl_comp_select", "World Cup")
-        curr_season = st.session_state.get("intl_season", "1998")
-        
-        if w:
-            is_wc = (comp == "World Cup")
-            is_finalissima = (comp == "Finalissima")
-            
-            host_val = st.session_state.get("intl_host", "").strip() if is_wc else None
-            runner_val = st.session_state.get("intl_run", "").strip() if (is_wc or is_finalissima) else None
-            third_val = st.session_state.get("intl_third", "").strip() if is_wc else None
-            score_val = st.session_state.get("intl_score", "").strip() if (is_wc or is_finalissima) else None
-            
-            conn = get_connection()
-            c = conn.cursor()
-            c.execute('''INSERT INTO trophy_logs (archive_id, season, competition_type, winner, runner_up, score, third_place, host_nation)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', 
-                      (active_archive_id, curr_season, comp, w, runner_val, score_val, third_val, host_val))
-            conn.commit()
-            conn.close()
-            
-            # Increment year by +4 for quadrennial tournaments
-            st.session_state["intl_season"] = increment_season_string(curr_season, years_to_add=4)
-            st.session_state["intl_host"] = ""
-            st.session_state["intl_win"] = ""
-            st.session_state["intl_run"] = ""
-            st.session_state["intl_third"] = ""
-            st.session_state["intl_score"] = "2-1"
-
-    with col_entry:
-        st.subheader("Log Tournament Result")
-        selected_comp = st.selectbox("Tournament", ["World Cup", "Euro", "Copa America", "AFCON", "Asian Cup", "Finalissima"], key="intl_comp_select")
-        st.text_input("Year / Season", key="intl_season")
-        st.caption("ℹ️ *Logging a result automatically increments the next tournament year by +4.*")
-        
-        if selected_comp == "World Cup":
-            st.text_input("Host Nation", key="intl_host")
-            st.text_input("Champion", key="intl_win")
-            st.text_input("Runner-Up", key="intl_run")
-            st.text_input("3rd Place", key="intl_third")
-            st.text_input("Final Scoreline", key="intl_score")
-        elif selected_comp == "Finalissima":
-            st.text_input("Winner / Champion", key="intl_win")
-            st.text_input("Runner-Up", key="intl_run")
-            st.text_input("Final Scoreline", key="intl_score")
+    with col2:
+        if comp_type == "Domestic Leagues":
+            sub_cat = st.selectbox("League Name", LEAGUE_OPTIONS)
+        elif comp_type == "Domestic Cups":
+            sub_cat = st.selectbox("Cup Name", CUP_OPTIONS)
+        elif comp_type == "European Competitions":
+            sub_cat = st.selectbox("Competition", EURO_OPTIONS)
         else:
-            st.text_input("Champion", key="intl_win")
-        
-        st.button("Log International Result", on_click=log_intl_callback, use_container_width=True)
+            sub_cat = st.selectbox("Tournament", INTL_OPTIONS)
 
-    with col_view:
-        st.subheader(f"Recorded {selected_comp} History")
-        conn = get_connection()
-        intl_df = pd.read_sql_query(
-            """SELECT id,
-                      season AS Season, 
-                      competition_type AS Tournament, 
-                      host_nation AS Host,
-                      winner AS Champion, 
-                      runner_up AS 'Runner-Up', 
-                      third_place AS '3rd Place',
-                      score AS Score 
-               FROM trophy_logs 
-               WHERE archive_id=? 
-                 AND competition_type = ? 
-               ORDER BY id DESC""", 
-            conn, params=(active_archive_id, selected_comp)
-        )
-        conn.close()
-        
-        if not intl_df.empty:
-            intl_df['Total Titles'] = intl_df.apply(
-                lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, r['Tournament'], r['Champion'], r['id']))} Title", axis=1
-            )
-            
-            display_cols = ['Season', 'Champion', 'Total Titles']
-            if intl_df['Host'].notna().any(): display_cols.append('Host')
-            if intl_df['Runner-Up'].notna().any(): display_cols.append('Runner-Up')
-            if intl_df['3rd Place'].notna().any(): display_cols.append('3rd Place')
-            if intl_df['Score'].notna().any(): display_cols.append('Score')
-            
-            st.dataframe(intl_df[display_cols], use_container_width=True, hide_index=True)
-        else:
-            st.info(f"No {selected_comp} results logged yet in this save.")
-
-# ------------------------------------------
-# PAGE 2: UEFA CHAMPIONS LEAGUE
-# ------------------------------------------
-with p2:
-    st.header("🇪🇺 UEFA Champions League")
-    col_e2, col_v2 = st.columns([1.2, 2])
+    st.markdown("---")
     
-    for k, d in [("ucl_season", "1998/99"), ("ucl_win", ""), ("ucl_run", ""), ("ucl_score", "2-1")]:
-        if k not in st.session_state:
-            st.session_state[k] = d
+    # Conditional Form Inputs based on Competition Category
+    with st.form("log_trophy_form", clear_on_submit=True):
+        if comp_type == "Domestic Leagues":
+            st.subheader(f"📊 {sub_cat} Record ({season})")
+            winner = st.text_input("Champion (League Winner)*")
+            runner_up = None
+            score = None
+            third_place = None
+            host_nation = None
 
-    def log_ucl_callback():
-        w = st.session_state.get("ucl_win", "").strip()
-        curr_season = st.session_state.get("ucl_season", "1998/99")
-        if w:
-            conn = get_connection()
-            c = conn.cursor()
-            c.execute('''INSERT INTO trophy_logs (archive_id, season, competition_type, winner, runner_up, score)
-                         VALUES (?, ?, 'UCL', ?, ?, ?)''', 
-                      (active_archive_id, curr_season, w, st.session_state.get("ucl_run", "").strip(), st.session_state.get("ucl_score", "").strip()))
-            conn.commit()
-            conn.close()
-            
-            # Increment season automatically (+1 year)
-            st.session_state["ucl_season"] = increment_season_string(curr_season, years_to_add=1)
-            st.session_state["ucl_win"] = ""
-            st.session_state["ucl_run"] = ""
-            st.session_state["ucl_score"] = "2-1"
+        elif comp_type == "Domestic Cups":
+            st.subheader(f"🍷 {sub_cat} Record ({season})")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                winner = st.text_input("Winner*")
+            with c2:
+                runner_up = st.text_input("Runner-Up")
+            with c3:
+                score = st.text_input("Final Score (e.g., 2-1 ET)")
+            third_place = None
+            host_nation = None
 
-    with col_e2:
-        st.subheader("Log UCL Final")
-        st.text_input("Season", key="ucl_season")
-        st.text_input("UCL Champion", key="ucl_win")
-        st.text_input("Runner-Up", key="ucl_run")
-        st.text_input("Scoreline", key="ucl_score")
-        
-        st.button("Log UCL Result", on_click=log_ucl_callback, use_container_width=True)
+        elif comp_type == "European Competitions":
+            st.subheader(f"🌍 {sub_cat} Record ({season})")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                winner = st.text_input("Winner*")
+            with c2:
+                runner_up = st.text_input("Runner-Up")
+            with c3:
+                score = st.text_input("Final Score")
+            third_place = None
+            host_nation = None
 
-    with col_v2:
-        st.subheader("Champions League Archive")
-        conn = get_connection()
-        ucl_df = pd.read_sql_query(
-            "SELECT id, season AS Season, winner AS Champion, runner_up AS 'Runner-Up', score AS Score FROM trophy_logs WHERE archive_id=? AND competition_type='UCL' ORDER BY id DESC",
-            conn, params=(active_archive_id,)
-        )
-        conn.close()
-        
-        if not ucl_df.empty:
-            ucl_df['Total Titles'] = ucl_df.apply(
-                lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, 'UCL', r['Champion'], r['id']))} UCL Title", axis=1
-            )
-            display_ucl = ucl_df[['Season', 'Champion', 'Runner-Up', 'Score', 'Total Titles']]
-            st.dataframe(display_ucl, use_container_width=True, hide_index=True)
-        else:
-            st.info("No Champions League results logged yet.")
-
-# ------------------------------------------
-# PAGE 3: DOMESTIC LEAGUES
-# ------------------------------------------
-with p3:
-    st.header("⚽ Big Five Domestic Leagues")
-    
-    league_tabs = st.tabs(["🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League", "🇪🇸 La Liga", "🇩🇪 Bundesliga", "🇮🇹 Serie A", "🇫🇷 Ligue 1"])
-    league_keys = ["EPL", "La Liga", "Bundesliga", "Serie A", "Ligue 1"]
-    
-    def log_league_callback(l_key):
-        s_k, w_k, r_k = f"s_{l_key}", f"w_{l_key}", f"r_{l_key}"
-        w = st.session_state.get(w_k, "").strip()
-        curr_season = st.session_state.get(s_k, "1998/99")
-        if w:
-            conn = get_connection()
-            c = conn.cursor()
-            c.execute('''INSERT INTO trophy_logs (archive_id, season, competition_type, sub_category, winner, runner_up)
-                         VALUES (?, ?, 'Domestic League', ?, ?, ?)''',
-                      (active_archive_id, curr_season, l_key, w, st.session_state.get(r_k, "").strip()))
-            conn.commit()
-            conn.close()
-            
-            # Increment domestic season automatically (+1 year)
-            st.session_state[s_k] = increment_season_string(curr_season, years_to_add=1)
-            st.session_state[w_k] = ""
-            st.session_state[r_k] = ""
-
-    for tab, l_key in zip(league_tabs, league_keys):
-        with tab:
-            cl1, cl2 = st.columns([1.2, 2])
-            
-            s_k, w_k, r_k = f"s_{l_key}", f"w_{l_key}", f"r_{l_key}"
-            if s_k not in st.session_state:
-                st.session_state[s_k] = "1998/99"
-            if w_k not in st.session_state:
-                st.session_state[w_k] = ""
-            if r_k not in st.session_state:
-                st.session_state[r_k] = ""
-
-            with cl1:
-                st.subheader(f"Log {l_key} Winner")
-                st.text_input("Season", key=s_k)
-                st.text_input("League Champion", key=w_k)
-                st.text_input("Runner-Up (Optional)", key=r_k)
-                
-                st.button(f"Log {l_key} Result", key=f"btn_{l_key}", on_click=log_league_callback, args=(l_key,), use_container_width=True)
-
-            with cl2:
-                st.subheader(f"{l_key} History Log")
-                conn = get_connection()
-                dom_df = pd.read_sql_query(
-                    "SELECT id, season AS Season, winner AS Champion, runner_up AS 'Runner-Up' FROM trophy_logs WHERE archive_id=? AND competition_type='Domestic League' AND sub_category=? ORDER BY id DESC",
-                    conn, params=(active_archive_id, l_key)
-                )
-                conn.close()
-                
-                if not dom_df.empty:
-                    dom_df['Total Titles'] = dom_df.apply(
-                        lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, l_key, r['Champion'], r['id'], sub_cat=l_key))} Title", axis=1
-                    )
-                    display_dom = dom_df[['Season', 'Champion', 'Runner-Up', 'Total Titles']]
-                    st.dataframe(display_dom, use_container_width=True, hide_index=True)
-                else:
-                    st.info(f"No {l_key} titles logged yet.")
-
-# ------------------------------------------
-# PAGE 4: BALLON D'OR
-# ------------------------------------------
-with p4:
-    st.header("🥇 Ballon d'Or Ledger")
-    
-    col_b1, col_b2 = st.columns([1.2, 2])
-    
-    for k, d in [("b_yr", "1999"), ("b_play", ""), ("b_club", ""), ("b_nat", "")]:
-        if k not in st.session_state:
-            st.session_state[k] = d
-
-    def log_ballon_callback():
-        p = st.session_state.get("b_play", "").strip()
-        curr_yr_str = str(st.session_state.get("b_yr", "1999")).strip()
-        if p:
-            pos_str = ", ".join(st.session_state.get("b_pos_select", ["ST"]))
-            conn = get_connection()
-            c = conn.cursor()
-            c.execute('''INSERT INTO ballon_dor_logs (archive_id, year, player_name, positions, club, nation)
-                         VALUES (?, ?, ?, ?, ?, ?)''',
-                      (active_archive_id, int(curr_yr_str) if curr_yr_str.isdigit() else 1999, p, pos_str, st.session_state.get("b_club", "").strip(), st.session_state.get("b_nat", "").strip()))
-            conn.commit()
-            conn.close()
-            
-            # Increment Ballon d'Or year automatically (+1 year)
-            st.session_state["b_yr"] = increment_season_string(curr_yr_str, years_to_add=1)
-            st.session_state["b_play"] = ""
-            st.session_state["b_club"] = ""
-            st.session_state["b_nat"] = ""
-
-    with col_b1:
-        st.subheader("Log Ballon d'Or Winner")
-        st.text_input("Year", key="b_yr")
-        st.text_input("Player Name", key="b_play")
-        st.multiselect("Positions Played", ["ST", "CF", "RW", "LW", "AM", "CM", "DM", "CB", "LB", "RB", "GK"], default=["ST"], key="b_pos_select")
-        st.text_input("Club", key="b_club")
-        st.text_input("Nation", key="b_nat")
-        
-        st.button("Log Ballon d'Or", on_click=log_ballon_callback, use_container_width=True)
-
-    with col_b2:
-        st.subheader("Ballon d'Or History")
-        conn = get_connection()
-        b_df = pd.read_sql_query(
-            "SELECT id, year AS Year, player_name AS Winner, positions AS Positions, club AS Club, nation AS Nation FROM ballon_dor_logs WHERE archive_id=? ORDER BY year DESC",
-            conn, params=(active_archive_id,)
-        )
-        conn.close()
-        
-        if not b_df.empty:
-            b_award_name = "Ballon d'Or"
-            b_df["Total Ballon d'Ors"] = b_df.apply(
-                lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, b_award_name, r['Winner'], r['id']))} Win", axis=1
-            )
-            display_b = b_df[['Year', 'Winner', 'Positions', 'Club', 'Nation', "Total Ballon d'Ors"]]
-            st.dataframe(display_b, use_container_width=True, hide_index=True)
-        else:
-            st.info("No Ballon d'Or winners logged yet.")
-
-# ------------------------------------------
-# PAGE 5: TIMELINE & KEY EVENTS
-# ------------------------------------------
-with p5:
-    st.header("📖 Career Timeline & Narrative Events")
-    
-    col_t1, col_t2 = st.columns([1.2, 2])
-    
-    if "t_season" not in st.session_state:
-        st.session_state["t_season"] = "1998/99"
-    if "t_details" not in st.session_state:
-        st.session_state["t_details"] = ""
-
-    def add_timeline_callback():
-        details = st.session_state.get("t_details", "").strip()
-        curr_season = st.session_state.get("t_season", "1998/99")
-        if details:
-            conn = get_connection()
-            c = conn.cursor()
-            c.execute("INSERT INTO timeline_logs (archive_id, season, category, event_details) VALUES (?, ?, ?, ?)",
-                      (active_archive_id, curr_season, "General", details))
-            conn.commit()
-            conn.close()
-            
-            # Increment season automatically (+1 year)
-            st.session_state["t_season"] = increment_season_string(curr_season, years_to_add=1)
-            st.session_state["t_details"] = ""
-
-    with col_t1:
-        st.subheader("Log Event / Storyline")
-        st.text_input("Season / Year", key="t_season")
-        st.text_area("Event Description & Notes", key="t_details")
-        
-        st.button("Add Event to Timeline", on_click=add_timeline_callback, use_container_width=True)
-
-    with col_t2:
-        st.subheader("Timeline Notebook")
-        conn = get_connection()
-        t_df = pd.read_sql_query(
-            "SELECT season AS Season, event_details AS Description FROM timeline_logs WHERE archive_id=? ORDER BY id DESC",
-            conn, params=(active_archive_id,)
-        )
-        conn.close()
-        
-        if not t_df.empty:
-            st.dataframe(t_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No timeline events logged yet.")
-
-# ------------------------------------------
-# PAGE 6: ACTIVE SAVE DATA EDITOR
-# ------------------------------------------
-with p6:
-    st.header(f"✏️ Active Save Data Editor ({selected_archive_name})")
-    
-    ed_tab1, ed_tab2, ed_tab3 = st.tabs(["Trophies Editor", "Ballon d'Or Editor", "Timeline Editor"])
-    
-    conn = get_connection()
-    c = conn.cursor()
-    
-    with ed_tab1:
-        st.subheader("Edit / Delete Trophy Log Rows")
-        trophies_df = pd.read_sql_query("SELECT id, season, competition_type, sub_category, winner, runner_up, score FROM trophy_logs WHERE archive_id=?", conn, params=(active_archive_id,))
-        if not trophies_df.empty:
-            sel_row_id = st.selectbox("Select Record ID", options=trophies_df['id'].tolist(), format_func=lambda x: f"ID {x}: {trophies_df[trophies_df['id']==x]['competition_type'].values[0]} ({trophies_df[trophies_df['id']==x]['season'].values[0]}) - {trophies_df[trophies_df['id']==x]['winner'].values[0]}")
-            
-            row_data = trophies_df[trophies_df['id'] == sel_row_id].iloc[0]
-            
-            e_winner = st.text_input("Edit Winner", value=row_data['winner'])
-            e_runner = st.text_input("Edit Runner-Up", value=str(row_data['runner_up'] or ''))
-            e_score = st.text_input("Edit Score", value=str(row_data['score'] or ''))
-            
+        else: # International Tournaments
+            st.subheader(f"🌐 {sub_cat} Record ({season})")
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("Update Trophy Record", use_container_width=True):
-                    c.execute("UPDATE trophy_logs SET winner=?, runner_up=?, score=? WHERE id=?", (e_winner, e_runner, e_score, sel_row_id))
-                    conn.commit()
-                    st.success("Record updated!")
-                    st.rerun()
+                winner = st.text_input("Champion (Winner)*")
+                runner_up = st.text_input("Runner-Up")
             with c2:
-                if st.button("🗑️ Delete Trophy Record", type="primary", use_container_width=True):
-                    c.execute("DELETE FROM trophy_logs WHERE id=?", (sel_row_id,))
-                    conn.commit()
-                    st.success("Record deleted!")
-                    st.rerun()
-        else:
-            st.info("No trophy records to edit.")
+                third_place = st.text_input("Third Place / Semi-Finalist")
+                host_nation = st.text_input("Host Nation(s)")
+            score = st.text_input("Final Score")
 
-    with ed_tab2:
-        st.subheader("Edit / Delete Ballon d'Or Rows")
-        b_edit_df = pd.read_sql_query("SELECT id, year, player_name, positions, club, nation FROM ballon_dor_logs WHERE archive_id=?", conn, params=(active_archive_id,))
-        if not b_edit_df.empty:
-            sel_b_id = st.selectbox("Select Ballon d'Or ID", options=b_edit_df['id'].tolist(), format_func=lambda x: f"ID {x}: {b_edit_df[b_edit_df['id']==x]['year'].values[0]} - {b_edit_df[b_edit_df['id']==x]['player_name'].values[0]}")
+        submit_trophy = st.form_submit_button("Save Trophy Record")
+        
+        if submit_trophy:
+            if not winner.strip():
+                st.error("Please provide the Winner/Champion name.")
+            else:
+                conn = get_db()
+                conn.execute('''INSERT INTO trophy_logs 
+                                (archive_id, season, competition_type, sub_category, winner, runner_up, score, third_place, host_nation) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                             (active_archive["id"], season, comp_type, sub_cat, winner.strip(), 
+                              runner_up.strip() if runner_up else None, 
+                              score.strip() if score else None, 
+                              third_place.strip() if third_place else None, 
+                              host_nation.strip() if host_nation else None))
+                conn.commit()
+                conn.close()
+                st.success(f"Successfully logged {sub_cat} ({season})!")
+
+# ------------------------------------------
+# TAB 2: BALLON D'OR
+# ------------------------------------------
+with tab2:
+    st.header("🥇 Log Ballon d'Or Winner")
+    
+    with st.form("ballon_dor_form", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            bd_year = st.selectbox("Year", YEARS, key="bd_year")
+            player_name = st.text_input("Player Name*")
+            positions = st.text_input("Position(s) (e.g., ST, RW, CAM)")
+        with c2:
+            club = st.text_input("Club")
+            nation = st.text_input("Nationality")
             
-            brow_data = b_edit_df[b_edit_df['id'] == sel_b_id].iloc[0]
-            
-            eb_player = st.text_input("Edit Player Name", value=brow_data['player_name'])
-            eb_club = st.text_input("Edit Club", value=brow_data['club'])
-            eb_nation = st.text_input("Edit Nation", value=brow_data['nation'])
-            
-            bc1, bc2 = st.columns(2)
-            with bc1:
-                if st.button("Update Ballon d'Or Record", use_container_width=True):
-                    c.execute("UPDATE ballon_dor_logs SET player_name=?, club=?, nation=? WHERE id=?", (eb_player, eb_club, eb_nation, sel_b_id))
-                    conn.commit()
-                    st.success("Ballon d'Or record updated!")
-                    st.rerun()
-            with bc2:
-                if st.button("🗑️ Delete Ballon d'Or Record", type="primary", use_container_width=True):
-                    c.execute("DELETE FROM ballon_dor_logs WHERE id=?", (sel_b_id,))
-                    conn.commit()
-                    st.success("Ballon d'Or record deleted!")
-                    st.rerun()
+        submit_bd = st.form_submit_button("Save Ballon d'Or Winner")
+        if submit_bd:
+            if not player_name.strip():
+                st.error("Please enter the Player Name.")
+            else:
+                conn = get_db()
+                conn.execute('''INSERT INTO ballon_dor_logs 
+                                (archive_id, year, player_name, positions, club, nation) 
+                                VALUES (?, ?, ?, ?, ?, ?)''',
+                             (active_archive["id"], bd_year, player_name.strip(), 
+                              positions.strip() if positions else None, 
+                              club.strip() if club else None, 
+                              nation.strip() if nation else None))
+                conn.commit()
+                conn.close()
+                st.success(f"Logged {player_name} as {bd_year} Ballon d'Or winner!")
+
+# ------------------------------------------
+# TAB 3: TIMELINE & LORE
+# ------------------------------------------
+with tab3:
+    st.header("📜 Log Career Timeline & Key Events")
+    
+    with st.form("timeline_form", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            tl_season = st.selectbox("Season", SEASONS, key="tl_season")
+        with c2:
+            category = st.selectbox("Event Category", [
+                "Managerial Move", 
+                "Major Transfer", 
+                "Icon Retirement", 
+                "Record Broken", 
+                "Club Milestone / Drama", 
+                "Other Storyline"
+            ])
+        
+        event_details = st.text_area("Event Description / Storyline*", placeholder="e.g. Zinedine Zidane retired. Signed Thierry Henry from Arsenal for £32M.")
+        
+        submit_tl = st.form_submit_button("Log Timeline Event")
+        if submit_tl:
+            if not event_details.strip():
+                st.error("Please enter event details.")
+            else:
+                conn = get_db()
+                conn.execute('''INSERT INTO timeline_logs 
+                                (archive_id, season, category, event_details) 
+                                VALUES (?, ?, ?, ?)''',
+                             (active_archive["id"], tl_season, category, event_details.strip()))
+                conn.commit()
+                conn.close()
+                st.success(f"Logged timeline event for {tl_season}!")
+
+# ------------------------------------------
+# TAB 4: CAREER DATABASE & STATS
+# ------------------------------------------
+with tab4:
+    st.header(f"📊 Archive Explorer - {active_archive['name']}")
+    
+    view_option = st.radio("Select View", ["Trophy History", "Ballon d'Or History", "Career Timeline"], horizontal=True)
+    
+    conn = get_db()
+    
+    if view_option == "Trophy History":
+        df_trophies = pd.read_sql_query(
+            "SELECT season, competition_type, sub_category, winner, runner_up, score, third_place, host_nation FROM trophy_logs WHERE archive_id = ? ORDER BY id DESC", 
+            conn, params=(active_archive["id"],)
+        )
+        if df_trophies.empty:
+            st.info("No trophy records logged yet.")
         else:
+            filter_cat = st.multiselect("Filter Category", COMPETITION_TYPES, default=COMPETITION_TYPES)
+            df_filtered = df_trophies[df_trophies['competition_type'].isin(filter_cat)]
+            
+            # Formatting Display Column Names cleanly
+            df_display = df_filtered.rename(columns={
+                'season': 'Season',
+                'competition_type': 'Category',
+                'sub_category': 'Competition',
+                'winner': 'Champion / Winner',
+                'runner_up': 'Runner-Up',
+                'score': 'Score',
+                'third_place': '3rd Place',
+                'host_nation': 'Host Nation'
+            })
+            
+            st.dataframe(df_display, use_container_width=True)
+
+    elif view_option == "Ballon d'Or History":
+        df_bd = pd.read_sql_query(
+            "SELECT year, player_name, positions, club, nation FROM ballon_dor_logs WHERE archive_id = ? ORDER BY year DESC", 
+            conn, params=(active_archive["id"],)
+        )
+        if df_bd.empty:
+            st.info("No Ballon d'Or winners logged yet.")
+        else:
+            df_bd.columns = ['Year', 'Winner', 'Positions', 'Club', 'Nation']
+            st.dataframe(df_bd, use_container_width=True)
+
+    else:
+        df_tl = pd.read_sql_query(
+            "SELECT season, category, event_details FROM timeline_logs WHERE archive_id = ? ORDER BY id DESC", 
+            conn, params=(active_archive["id"],)
+        )
+        if df_tl.empty:
+            st.info("No timeline events logged yet.")
+        else:
+            df_tl.columns = ['Season', 'Category', 'Event Details']
+            st.dataframe(df_tl, use_container_width=True)
+            
+    conn.close()
+
+# ------------------------------------------
+# TAB 5: MANAGE & EDIT LOGGED RECORDS
+# ------------------------------------------
+with tab5:
+    st.header("⚙️ Edit or Delete Existing Records")
+    
+    manage_category = st.selectbox("Select Record Type to Edit/Delete", ["Trophy Logs", "Ballon d'Or Logs", "Timeline Logs"])
+    conn = get_db()
+    
+    if manage_category == "Trophy Logs":
+        records = conn.execute("SELECT * FROM trophy_logs WHERE archive_id = ? ORDER BY id DESC", (active_archive["id"],)).fetchall()
+        if not records:
+            st.info("No trophy logs to edit.")
+        else:
+            options = {f"ID #{r['id']} | {r['season']} - {r['sub_category']} (Winner: {r['winner']})": r for r in records}
+            selected_option = st.selectbox("Select Record to Manage", list(options.keys()))
+            selected_record = options[selected_option]
+            
+            col_edit, col_del = st.columns([3, 1])
+            with col_edit:
+                with st.expander("✏️ Edit Selected Trophy Record"):
+                    with st.form("edit_trophy_form"):
+                        e_season = st.text_input("Season", value=selected_record["season"])
+                        e_sub_cat = st.text_input("Competition Name", value=selected_record["sub_category"])
+                        e_winner = st.text_input("Winner / Champion", value=selected_record["winner"])
+                        
+                        # Only show runner-up and score fields if it's NOT a domestic league
+                        if selected_record["competition_type"] != "Domestic Leagues":
+                            e_runner_up = st.text_input("Runner-Up", value=selected_record["runner_up"] or "")
+                            e_score = st.text_input("Score", value=selected_record["score"] or "")
+                        else:
+                            e_runner_up = None
+                            e_score = None
+
+                        e_third = st.text_input("3rd Place", value=selected_record["third_place"] or "")
+                        e_host = st.text_input("Host Nation", value=selected_record["host_nation"] or "")
+                        
+                        save_edit = st.form_submit_button("Update Record")
+                        if save_edit:
+                            conn.execute('''UPDATE trophy_logs SET season=?, sub_category=?, winner=?, runner_up=?, score=?, third_place=?, host_nation=? WHERE id=?''',
+                                         (e_season, e_sub_cat, e_winner, e_runner_up, e_score, e_third, e_host, selected_record["id"]))
+                            conn.commit()
+                            st.success("Record updated successfully!")
+                            st.rerun()
+
+            with col_del:
+                st.write(" ")
+                st.write(" ")
+                if st.button("❌ Delete Record", key="del_trophy"):
+                    conn.execute("DELETE FROM trophy_logs WHERE id = ?", (selected_record["id"],))
+                    conn.commit()
+                    st.success("Record deleted.")
+                    st.rerun()
+
+    elif manage_category == "Ballon d'Or Logs":
+        records = conn.execute("SELECT * FROM ballon_dor_logs WHERE archive_id = ? ORDER BY year DESC", (active_archive["id"],)).fetchall()
+        if not records:
             st.info("No Ballon d'Or records to edit.")
-
-    with ed_tab3:
-        st.subheader("Edit / Delete Timeline Rows")
-        t_edit_df = pd.read_sql_query("SELECT id, season, category, event_details FROM timeline_logs WHERE archive_id=?", conn, params=(active_archive_id,))
-        if not t_edit_df.empty:
-            sel_t_id = st.selectbox("Select Event ID", options=t_edit_df['id'].tolist(), format_func=lambda x: f"ID {x}: {t_edit_df[t_edit_df['id']==x]['season'].values[0]}")
-            
-            trow_data = t_edit_df[t_edit_df['id'] == sel_t_id].iloc[0]
-            
-            et_details = st.text_area("Edit Event Details", value=trow_data['event_details'])
-            
-            tc1, tc2 = st.columns(2)
-            with tc1:
-                if st.button("Update Event Record", use_container_width=True):
-                    c.execute("UPDATE timeline_logs SET event_details=? WHERE id=?", (et_details, sel_t_id))
-                    conn.commit()
-                    st.success("Timeline record updated!")
-                    st.rerun()
-            with tc2:
-                if st.button("🗑️ Delete Event Record", type="primary", use_container_width=True):
-                    c.execute("DELETE FROM timeline_logs WHERE id=?", (sel_t_id,))
-                    conn.commit()
-                    st.success("Timeline record deleted!")
-                    st.rerun()
         else:
-            st.info("No timeline records to edit.")
+            options = {f"ID #{r['id']} | {r['year']} - {r['player_name']} ({r['club']})": r for r in records}
+            selected_option = st.selectbox("Select Record to Manage", list(options.keys()))
+            selected_record = options[selected_option]
+            
+            col_edit, col_del = st.columns([3, 1])
+            with col_edit:
+                with st.expander("✏️ Edit Selected Ballon d'Or Record"):
+                    with st.form("edit_bd_form"):
+                        e_year = st.number_input("Year", value=selected_record["year"], step=1)
+                        e_player = st.text_input("Player Name", value=selected_record["player_name"])
+                        e_pos = st.text_input("Positions", value=selected_record["positions"] or "")
+                        e_club = st.text_input("Club", value=selected_record["club"] or "")
+                        e_nation = st.text_input("Nation", value=selected_record["nation"] or "")
+                        
+                        save_edit = st.form_submit_button("Update Record")
+                        if save_edit:
+                            conn.execute('''UPDATE ballon_dor_logs SET year=?, player_name=?, positions=?, club=?, nation=? WHERE id=?''',
+                                         (e_year, e_player, e_pos, e_club, e_nation, selected_record["id"]))
+                            conn.commit()
+                            st.success("Record updated!")
+                            st.rerun()
+
+            with col_del:
+                st.write(" ")
+                st.write(" ")
+                if st.button("❌ Delete Record", key="del_bd"):
+                    conn.execute("DELETE FROM ballon_dor_logs WHERE id = ?", (selected_record["id"],))
+                    conn.commit()
+                    st.success("Record deleted.")
+                    st.rerun()
+
+    else: # Timeline Logs
+        records = conn.execute("SELECT * FROM timeline_logs WHERE archive_id = ? ORDER BY id DESC", (active_archive["id"],)).fetchall()
+        if not records:
+            st.info("No timeline logs to edit.")
+        else:
+            options = {f"ID #{r['id']} | {r['season']} - {r['category']}": r for r in records}
+            selected_option = st.selectbox("Select Record to Manage", list(options.keys()))
+            selected_record = options[selected_option]
+            
+            col_edit, col_del = st.columns([3, 1])
+            with col_edit:
+                with st.expander("✏️ Edit Selected Timeline Record"):
+                    with st.form("edit_tl_form"):
+                        e_season = st.text_input("Season", value=selected_record["season"])
+                        e_cat = st.text_input("Category", value=selected_record["category"])
+                        e_details = st.text_area("Event Details", value=selected_record["event_details"])
+                        
+                        save_edit = st.form_submit_button("Update Record")
+                        if save_edit:
+                            conn.execute('''UPDATE timeline_logs SET season=?, category=?, event_details=? WHERE id=?''',
+                                         (e_season, e_cat, e_details, selected_record["id"]))
+                            conn.commit()
+                            st.success("Record updated!")
+                            st.rerun()
+
+            with col_del:
+                st.write(" ")
+                st.write(" ")
+                if st.button("❌ Delete Record", key="del_tl"):
+                    conn.execute("DELETE FROM timeline_logs WHERE id = ?", (selected_record["id"],))
+                    conn.commit()
+                    st.success("Record deleted.")
+                    st.rerun()
 
     conn.close()
