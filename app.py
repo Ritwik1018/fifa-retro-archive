@@ -150,6 +150,7 @@ def get_ordinal(n):
         suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
     return f"{n}{suffix}"
 
+# FIXED GET TOTAL TITLES FUNCTION
 def get_total_titles_up_to(archive_id, comp_key, winner_name, record_id, sub_cat=None):
     base_count = BASELINES.get(comp_key, {}).get(winner_name, 0)
     conn = get_connection()
@@ -159,8 +160,9 @@ def get_total_titles_up_to(archive_id, comp_key, winner_name, record_id, sub_cat
         c.execute("SELECT COUNT(*) FROM ballon_dor_logs WHERE archive_id=? AND player_name=? AND id <= ?", (archive_id, winner_name, record_id))
     else:
         if sub_cat:
-            c.execute("SELECT COUNT(*) FROM trophy_logs WHERE archive_id=? AND competition_type=? AND sub_category=? AND winner=? AND id <= ?", 
-                      (archive_id, comp_key, sub_cat, winner_name, record_id))
+            # Matches 'Domestic League' rows with matching sub_category and archive_id
+            c.execute("SELECT COUNT(*) FROM trophy_logs WHERE archive_id=? AND competition_type='Domestic League' AND sub_category=? AND winner=? AND id <= ?", 
+                      (archive_id, sub_cat, winner_name, record_id))
         else:
             c.execute("SELECT COUNT(*) FROM trophy_logs WHERE archive_id=? AND competition_type=? AND winner=? AND id <= ?", 
                       (archive_id, comp_key, winner_name, record_id))
@@ -323,7 +325,6 @@ with p1:
             conn.commit()
             conn.close()
             
-            # Increment year by +4 for quadrennial tournaments
             st.session_state["intl_season"] = increment_season_string(curr_season, years_to_add=4)
             st.session_state["intl_host"] = ""
             st.session_state["intl_win"] = ""
@@ -410,7 +411,6 @@ with p2:
             conn.commit()
             conn.close()
             
-            # Increment season automatically (+1 year)
             st.session_state["ucl_season"] = increment_season_string(curr_season, years_to_add=1)
             st.session_state["ucl_win"] = ""
             st.session_state["ucl_run"] = ""
@@ -465,7 +465,6 @@ with p3:
             conn.commit()
             conn.close()
             
-            # Increment domestic season automatically (+1 year)
             st.session_state[s_k] = increment_season_string(curr_season, years_to_add=1)
             st.session_state[w_k] = ""
 
@@ -529,7 +528,6 @@ with p4:
             conn.commit()
             conn.close()
             
-            # Increment Ballon d'Or year automatically (+1 year)
             st.session_state["b_yr"] = increment_season_string(curr_yr_str, years_to_add=1)
             st.session_state["b_play"] = ""
             st.session_state["b_club"] = ""
@@ -588,7 +586,6 @@ with p5:
             conn.commit()
             conn.close()
             
-            # Increment season automatically (+1 year)
             st.session_state["t_season"] = increment_season_string(curr_season, years_to_add=1)
             st.session_state["t_details"] = ""
 
