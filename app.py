@@ -342,7 +342,7 @@ with p1:
         st.button("Log International Result", on_click=log_intl_callback, use_container_width=True)
 
     with col_view:
-        st.subheader("Recorded International History")
+        st.subheader(f"Recorded {selected_comp} History")
         conn = get_connection()
         intl_df = pd.read_sql_query(
             """SELECT season AS Season, 
@@ -354,9 +354,9 @@ with p1:
                       score AS Score 
                FROM trophy_logs 
                WHERE archive_id=? 
-                 AND competition_type IN ('World Cup', 'Euro', 'Copa America', 'AFCON', 'Asian Cup', 'Finalissima') 
+                 AND competition_type = ? 
                ORDER BY id DESC""", 
-            conn, params=(active_archive_id,)
+            conn, params=(active_archive_id, selected_comp)
         )
         conn.close()
         
@@ -365,7 +365,8 @@ with p1:
                 lambda r: f"{get_ordinal(get_total_titles(active_archive_id, r['Tournament'], r['Champion']))} Title", axis=1
             )
             
-            display_cols = ['Season', 'Tournament', 'Champion', 'Total Titles']
+            # Filter output columns based on populated fields for the specific tournament
+            display_cols = ['Season', 'Champion', 'Total Titles']
             if intl_df['Host'].notna().any(): display_cols.append('Host')
             if intl_df['Runner-Up'].notna().any(): display_cols.append('Runner-Up')
             if intl_df['3rd Place'].notna().any(): display_cols.append('3rd Place')
@@ -373,7 +374,7 @@ with p1:
             
             st.dataframe(intl_df[display_cols], use_container_width=True, hide_index=True)
         else:
-            st.info("No international results logged yet in this save.")
+            st.info(f"No {selected_comp} results logged yet in this save.")
 
 # ------------------------------------------
 # PAGE 2: UEFA CHAMPIONS LEAGUE
