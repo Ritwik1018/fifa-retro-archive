@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+import re
 
 # ==========================================
 # DATABASE INITIALIZATION & BASELINES
@@ -124,6 +125,26 @@ BASELINES = {
         "Roberto Baggio": 1, "Hristo Stoichkov": 1, "George Weah": 1, "Matthias Sammer": 1, "Zinedine Zidane": 1
     }
 }
+
+# AUTO-INCREMENT HELPER FUNCTION
+def increment_season_string(season_str):
+    """
+    Increments '2008/09' to '2009/10', '1998/99' to '1999/00', 
+    or single year strings like '2008' to '2009'.
+    """
+    season_str = str(season_str).strip()
+    match_slash = re.match(r"^(\d{4})/(\d{2})$", season_str)
+    if match_slash:
+        start_year = int(match_slash.group(1))
+        next_start = start_year + 1
+        next_end = (next_start + 1) % 100
+        return f"{next_start}/{next_end:02d}"
+    
+    match_single = re.match(r"^(\d{4})$", season_str)
+    if match_single:
+        return str(int(match_single.group(1)) + 1)
+        
+    return season_str
 
 # Ordinal Helper Function
 def get_ordinal(n):
@@ -287,12 +308,12 @@ with p1:
     def log_intl_callback():
         w = st.session_state.get("intl_win", "").strip()
         comp = st.session_state.get("intl_comp_select", "World Cup")
+        curr_season = st.session_state.get("intl_season", "1998")
         
         if w:
             is_wc = (comp == "World Cup")
             is_finalissima = (comp == "Finalissima")
             
-            # Determine fields to record
             host_val = st.session_state.get("intl_host", "").strip() if is_wc else None
             runner_val = st.session_state.get("intl_run", "").strip() if (is_wc or is_finalissima) else None
             third_val = st.session_state.get("intl_third", "").strip() if is_wc else None
@@ -302,17 +323,12 @@ with p1:
             c = conn.cursor()
             c.execute('''INSERT INTO trophy_logs (archive_id, season, competition_type, winner, runner_up, score, third_place, host_nation)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', 
-                      (active_archive_id, 
-                       st.session_state.get("intl_season", ""), 
-                       comp, 
-                       w, 
-                       runner_val, 
-                       score_val, 
-                       third_val, 
-                       host_val))
+                      (active_archive_id, curr_season, comp, w, runner_val, score_val, third_val, host_val))
             conn.commit()
             conn.close()
             
+            # Increment season automatically
+            st.session_state["intl_season"] = increment_season_string(curr_season)
             st.session_state["intl_host"] = ""
             st.session_state["intl_win"] = ""
             st.session_state["intl_run"] = ""
@@ -324,7 +340,6 @@ with p1:
         selected_comp = st.selectbox("Tournament", ["World Cup", "Euro", "Copa America", "AFCON", "Asian Cup", "Finalissima"], key="intl_comp_select")
         st.text_input("Year / Season", key="intl_season")
         
-        # Display inputs conditionally
         if selected_comp == "World Cup":
             st.text_input("Host Nation", key="intl_host")
             st.text_input("Champion", key="intl_win")
@@ -336,7 +351,6 @@ with p1:
             st.text_input("Runner-Up", key="intl_run")
             st.text_input("Final Scoreline", key="intl_score")
         else:
-            # Euro, Copa America, AFCON, Asian Cup
             st.text_input("Champion", key="intl_win")
         
         st.button("Log International Result", on_click=log_intl_callback, use_container_width=True)
@@ -389,15 +403,18 @@ with p2:
 
     def log_ucl_callback():
         w = st.session_state.get("ucl_win", "").strip()
+        curr_season = st.session_state.get("ucl_season", "1998/99")
         if w:
             conn = get_connection()
             c = conn.cursor()
             c.execute('''INSERT INTO trophy_logs (archive_id, season, competition_type, winner, runner_up, score)
                          VALUES (?, ?, 'UCL', ?, ?, ?)''', 
-                      (active_archive_id, st.session_state.get("ucl_season", ""), w, st.session_state.get("ucl_run", "").strip(), st.session_state.get("ucl_score", "").strip()))
+                      (active_archive_id, curr_season, w, st.session_state.get("ucl_run", "").strip(), st.session_state.get("ucl_score", "").strip()))
             conn.commit()
             conn.close()
             
+            # Increment season automatically (e.g. 2008/09 -> 2009/10)
+            st.session_state["ucl_season"] = increment_season_string(curr_season)
             st.session_state["ucl_win"] = ""
             st.session_state["ucl_run"] = ""
             st.session_state["ucl_score"] = "2-1"
@@ -441,15 +458,18 @@ with p3:
     def log_league_callback(l_key):
         s_k, w_k, r_k = f"s_{l_key}", f"w_{l_key}", f"r_{l_key}"
         w = st.session_state.get(w_k, "").strip()
+        curr_season = st.session_state.get(s_k, "1998/99")
         if w:
             conn = get_connection()
             c = conn.cursor()
             c.execute('''INSERT INTO trophy_logs (archive_id, season, competition_type, sub_category, winner, runner_up)
                          VALUES (?, ?, 'Domestic League', ?, ?, ?)''',
-                      (active_archive_id, st.session_state.get(s_k, ""), l_key, w, st.session_state.get(r_k, "").strip()))
+                      (active_archive_id, curr_season, l_key, w, st.session_state.get(r_k, "").strip()))
             conn.commit()
             conn.close()
             
+            # Increment season automatically
+            st.session_state[s_k] = increment_season_string(curr_season)
             st.session_state[w_k] = ""
             st.session_state[r_k] = ""
 
@@ -505,16 +525,19 @@ with p4:
 
     def log_ballon_callback():
         p = st.session_state.get("b_play", "").strip()
+        curr_yr = st.session_state.get("b_yr", 1999)
         if p:
             pos_str = ", ".join(st.session_state.get("b_pos_select", ["ST"]))
             conn = get_connection()
             c = conn.cursor()
             c.execute('''INSERT INTO ballon_dor_logs (archive_id, year, player_name, positions, club, nation)
                          VALUES (?, ?, ?, ?, ?, ?)''',
-                      (active_archive_id, st.session_state.get("b_yr", 1999), p, pos_str, st.session_state.get("b_club", "").strip(), st.session_state.get("b_nat", "").strip()))
+                      (active_archive_id, curr_yr, p, pos_str, st.session_state.get("b_club", "").strip(), st.session_state.get("b_nat", "").strip()))
             conn.commit()
             conn.close()
             
+            # Increment year automatically
+            st.session_state["b_yr"] = curr_yr + 1
             st.session_state["b_play"] = ""
             st.session_state["b_club"] = ""
             st.session_state["b_nat"] = ""
@@ -563,14 +586,17 @@ with p5:
 
     def add_timeline_callback():
         details = st.session_state.get("t_details", "").strip()
+        curr_season = st.session_state.get("t_season", "1998/99")
         if details:
             conn = get_connection()
             c = conn.cursor()
             c.execute("INSERT INTO timeline_logs (archive_id, season, category, event_details) VALUES (?, ?, ?, ?)",
-                      (active_archive_id, st.session_state.get("t_season", ""), "General", details))
+                      (active_archive_id, curr_season, "General", details))
             conn.commit()
             conn.close()
             
+            # Increment season automatically
+            st.session_state["t_season"] = increment_season_string(curr_season)
             st.session_state["t_details"] = ""
 
     with col_t1:
