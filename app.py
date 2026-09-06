@@ -201,11 +201,13 @@ with tab1:
 
     st.markdown("---")
     
-    # Conditional Form Inputs based on Competition Category
+    # Restored form containers and structure
     with st.form("log_trophy_form", clear_on_submit=True):
         if comp_type == "Domestic Leagues":
             st.subheader(f"📊 {sub_cat} Record ({season})")
-            winner = st.text_input("Champion (League Winner)*")
+            c1, c2 = st.columns([2, 1])
+            with c1:
+                winner = st.text_input("Champion (League Winner)*")
             runner_up = None
             score = None
             third_place = None
@@ -246,7 +248,8 @@ with tab1:
                 host_nation = st.text_input("Host Nation(s)")
             score = st.text_input("Final Score")
 
-        submit_trophy = st.form_submit_button("Save Trophy Record")
+        st.markdown("<br>", unsafe_allow_html=True)
+        submit_trophy = st.form_submit_button("Save Trophy Record", use_container_width=True)
         
         if submit_trophy:
             if not winner.strip():
@@ -281,7 +284,8 @@ with tab2:
             club = st.text_input("Club")
             nation = st.text_input("Nationality")
             
-        submit_bd = st.form_submit_button("Save Ballon d'Or Winner")
+        st.markdown("<br>", unsafe_allow_html=True)
+        submit_bd = st.form_submit_button("Save Ballon d'Or Winner", use_container_width=True)
         if submit_bd:
             if not player_name.strip():
                 st.error("Please enter the Player Name.")
@@ -320,7 +324,8 @@ with tab3:
         
         event_details = st.text_area("Event Description / Storyline*", placeholder="e.g. Zinedine Zidane retired. Signed Thierry Henry from Arsenal for £32M.")
         
-        submit_tl = st.form_submit_button("Log Timeline Event")
+        st.markdown("<br>", unsafe_allow_html=True)
+        submit_tl = st.form_submit_button("Log Timeline Event", use_container_width=True)
         if submit_tl:
             if not event_details.strip():
                 st.error("Please enter event details.")
@@ -341,6 +346,7 @@ with tab4:
     st.header(f"📊 Archive Explorer - {active_archive['name']}")
     
     view_option = st.radio("Select View", ["Trophy History", "Ballon d'Or History", "Career Timeline"], horizontal=True)
+    st.markdown("---")
     
     conn = get_db()
     
@@ -355,7 +361,6 @@ with tab4:
             filter_cat = st.multiselect("Filter Category", COMPETITION_TYPES, default=COMPETITION_TYPES)
             df_filtered = df_trophies[df_trophies['competition_type'].isin(filter_cat)]
             
-            # Formatting Display Column Names cleanly
             df_display = df_filtered.rename(columns={
                 'season': 'Season',
                 'competition_type': 'Category',
@@ -400,6 +405,7 @@ with tab5:
     st.header("⚙️ Edit or Delete Existing Records")
     
     manage_category = st.selectbox("Select Record Type to Edit/Delete", ["Trophy Logs", "Ballon d'Or Logs", "Timeline Logs"])
+    st.markdown("---")
     conn = get_db()
     
     if manage_category == "Trophy Logs":
@@ -413,24 +419,32 @@ with tab5:
             
             col_edit, col_del = st.columns([3, 1])
             with col_edit:
-                with st.expander("✏️ Edit Selected Trophy Record"):
+                with st.expander("✏️ Edit Selected Trophy Record", expanded=True):
                     with st.form("edit_trophy_form"):
-                        e_season = st.text_input("Season", value=selected_record["season"])
-                        e_sub_cat = st.text_input("Competition Name", value=selected_record["sub_category"])
-                        e_winner = st.text_input("Winner / Champion", value=selected_record["winner"])
-                        
-                        # Only show runner-up and score fields if it's NOT a domestic league
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            e_season = st.text_input("Season", value=selected_record["season"])
+                            e_winner = st.text_input("Winner / Champion", value=selected_record["winner"])
+                        with c2:
+                            e_sub_cat = st.text_input("Competition Name", value=selected_record["sub_category"])
+                            
                         if selected_record["competition_type"] != "Domestic Leagues":
-                            e_runner_up = st.text_input("Runner-Up", value=selected_record["runner_up"] or "")
-                            e_score = st.text_input("Score", value=selected_record["score"] or "")
+                            c3, c4 = st.columns(2)
+                            with c3:
+                                e_runner_up = st.text_input("Runner-Up", value=selected_record["runner_up"] or "")
+                            with c4:
+                                e_score = st.text_input("Score", value=selected_record["score"] or "")
                         else:
                             e_runner_up = None
                             e_score = None
 
-                        e_third = st.text_input("3rd Place", value=selected_record["third_place"] or "")
-                        e_host = st.text_input("Host Nation", value=selected_record["host_nation"] or "")
+                        c5, c6 = st.columns(2)
+                        with c5:
+                            e_third = st.text_input("3rd Place", value=selected_record["third_place"] or "")
+                        with c6:
+                            e_host = st.text_input("Host Nation", value=selected_record["host_nation"] or "")
                         
-                        save_edit = st.form_submit_button("Update Record")
+                        save_edit = st.form_submit_button("Update Record", use_container_width=True)
                         if save_edit:
                             conn.execute('''UPDATE trophy_logs SET season=?, sub_category=?, winner=?, runner_up=?, score=?, third_place=?, host_nation=? WHERE id=?''',
                                          (e_season, e_sub_cat, e_winner, e_runner_up, e_score, e_third, e_host, selected_record["id"]))
@@ -441,7 +455,7 @@ with tab5:
             with col_del:
                 st.write(" ")
                 st.write(" ")
-                if st.button("❌ Delete Record", key="del_trophy"):
+                if st.button("❌ Delete Record", key="del_trophy", use_container_width=True):
                     conn.execute("DELETE FROM trophy_logs WHERE id = ?", (selected_record["id"],))
                     conn.commit()
                     st.success("Record deleted.")
@@ -458,15 +472,18 @@ with tab5:
             
             col_edit, col_del = st.columns([3, 1])
             with col_edit:
-                with st.expander("✏️ Edit Selected Ballon d'Or Record"):
+                with st.expander("✏️ Edit Selected Ballon d'Or Record", expanded=True):
                     with st.form("edit_bd_form"):
-                        e_year = st.number_input("Year", value=selected_record["year"], step=1)
-                        e_player = st.text_input("Player Name", value=selected_record["player_name"])
-                        e_pos = st.text_input("Positions", value=selected_record["positions"] or "")
-                        e_club = st.text_input("Club", value=selected_record["club"] or "")
-                        e_nation = st.text_input("Nation", value=selected_record["nation"] or "")
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            e_year = st.number_input("Year", value=selected_record["year"], step=1)
+                            e_player = st.text_input("Player Name", value=selected_record["player_name"])
+                            e_pos = st.text_input("Positions", value=selected_record["positions"] or "")
+                        with c2:
+                            e_club = st.text_input("Club", value=selected_record["club"] or "")
+                            e_nation = st.text_input("Nation", value=selected_record["nation"] or "")
                         
-                        save_edit = st.form_submit_button("Update Record")
+                        save_edit = st.form_submit_button("Update Record", use_container_width=True)
                         if save_edit:
                             conn.execute('''UPDATE ballon_dor_logs SET year=?, player_name=?, positions=?, club=?, nation=? WHERE id=?''',
                                          (e_year, e_player, e_pos, e_club, e_nation, selected_record["id"]))
@@ -477,7 +494,7 @@ with tab5:
             with col_del:
                 st.write(" ")
                 st.write(" ")
-                if st.button("❌ Delete Record", key="del_bd"):
+                if st.button("❌ Delete Record", key="del_bd", use_container_width=True):
                     conn.execute("DELETE FROM ballon_dor_logs WHERE id = ?", (selected_record["id"],))
                     conn.commit()
                     st.success("Record deleted.")
@@ -494,13 +511,16 @@ with tab5:
             
             col_edit, col_del = st.columns([3, 1])
             with col_edit:
-                with st.expander("✏️ Edit Selected Timeline Record"):
+                with st.expander("✏️ Edit Selected Timeline Record", expanded=True):
                     with st.form("edit_tl_form"):
-                        e_season = st.text_input("Season", value=selected_record["season"])
-                        e_cat = st.text_input("Category", value=selected_record["category"])
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            e_season = st.text_input("Season", value=selected_record["season"])
+                        with c2:
+                            e_cat = st.text_input("Category", value=selected_record["category"])
                         e_details = st.text_area("Event Details", value=selected_record["event_details"])
                         
-                        save_edit = st.form_submit_button("Update Record")
+                        save_edit = st.form_submit_button("Update Record", use_container_width=True)
                         if save_edit:
                             conn.execute('''UPDATE timeline_logs SET season=?, category=?, event_details=? WHERE id=?''',
                                          (e_season, e_cat, e_details, selected_record["id"]))
@@ -511,7 +531,7 @@ with tab5:
             with col_del:
                 st.write(" ")
                 st.write(" ")
-                if st.button("❌ Delete Record", key="del_tl"):
+                if st.button("❌ Delete Record", key="del_tl", use_container_width=True):
                     conn.execute("DELETE FROM timeline_logs WHERE id = ?", (selected_record["id"],))
                     conn.commit()
                     st.success("Record deleted.")
