@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+import numpy as np
 import re
 
 # ==========================================
@@ -134,22 +135,28 @@ BASELINES = {
     }
 }
 
-# HELPER: DYNAMICALLY CLEAN AND DROP EMPTY DATAFRAME COLUMNS
+# HELPER: AUTO-HIDE EMPTY COLUMNS EVERYWHERE
 def clean_dataframe(df):
     """
-    Drops any column where all values are None, NaN, or empty strings ("").
+    Normalizes all variations of missing data (None, 'None', 'nan', '', whitespace)
+    and drops any column where all values are empty or missing.
     """
     if df.empty:
         return df
     
-    cols_to_keep = []
-    for col in df.columns:
-        # Check if column has at least one non-null, non-empty value
-        series = df[col].astype(str).str.strip().replace({'None': '', 'nan': '', '<NA>': ''})
-        if (series != '').any():
-            cols_to_keep.append(col)
-            
-    return df[cols_to_keep]
+    cleaned_df = df.copy()
+    # Normalize empty indicators to np.nan across the dataframe
+    cleaned_df = cleaned_df.replace(
+        to_replace=[r'^\s*$', None, 'None', 'nan', '<NA>', 'NaN', 'NoneType'], 
+        value=np.nan, 
+        regex=True
+    )
+    
+    # Drop columns that are completely null/empty
+    cleaned_df = cleaned_df.dropna(how='all', axis=1)
+    
+    # Fill remaining NaNs back with empty strings for clean table rendering
+    return cleaned_df.fillna('')
 
 # AUTO-INCREMENT HELPER
 def increment_season_string(season_str, years_to_add=1):
@@ -393,7 +400,7 @@ with p1:
         is_4yr = selected_comp in ["World Cup", "Euro", "Copa America", "AFCON", "Asian Cup", "Finalissima"]
         intl_key = f"intl_yr_{selected_comp}"
         
-        # Calculate auto-year independently per tournament
+        # Auto-year update calculation per tournament
         if intl_key not in st.session_state:
             st.session_state[intl_key] = get_next_competition_year(active_archive_id, active_start_year, selected_comp, is_quadrennial=is_4yr)
             
@@ -456,11 +463,10 @@ with p1:
             intl_df['Total Titles'] = intl_df.apply(
                 lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, r['Tournament'], r['Champion'], r['id']))} Title", axis=1
             )
-            # Re-order preferred columns
             pref_cols = ['Season', 'Champion', 'Total Titles', 'Host', 'Runner-Up', '3rd Place', 'Score']
             existing_cols = [c for c in pref_cols if c in intl_df.columns]
             
-            # Clean dataframe: automatically drop empty/null columns
+            # Clean and auto-hide empty columns
             display_df = clean_dataframe(intl_df[existing_cols])
             st.dataframe(display_df, use_container_width=True, hide_index=True)
         else:
