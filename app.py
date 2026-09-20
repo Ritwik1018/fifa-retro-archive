@@ -85,7 +85,7 @@ BASELINES = {
     "AFCON": {"Ghana": 4, "Egypt": 4, "Cameroon": 2, "Nigeria": 2, "DR Congo": 2, "Ivory Coast": 1, "South Africa": 1, "Morocco": 1, "Algeria": 1, "Ethiopia": 1, "Sudan": 1, "Congo": 1, "Senegal": 0, "Zambia": 0, "Tunisia": 0},
     "Asian Cup": {"Iran": 3, "Saudi Arabia": 3, "South Korea": 2, "Japan": 1, "Kuwait": 1, "Israel": 1, "Qatar": 0, "Australia": 0},
     "Finalissima": {"France": 1, "Argentina": 1},
-    "Club World Cup": {"Real Madrid": 4, "Barcelona": 3, "Corinthians": 2, "Bayern Munich": 1, "Liverpool": 1, "Chelsea": 1, "Inter Milan": 1, "AC Milan": 1, "Manchester United": 1, "Sao Paulo": 1, "International": 1},
+    "Club World Cup": {},
     "UCL": {
         "Real Madrid": 7, "AC Milan": 5, "Liverpool": 4, "Ajax": 4, "Bayern Munich": 3,
         "Inter Milan": 2, "Benfica": 2, "Nottingham Forest": 2, "Juventus": 2, "Porto": 1,
