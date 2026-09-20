@@ -134,6 +134,23 @@ BASELINES = {
     }
 }
 
+# HELPER: DYNAMICALLY CLEAN AND DROP EMPTY DATAFRAME COLUMNS
+def clean_dataframe(df):
+    """
+    Drops any column where all values are None, NaN, or empty strings ("").
+    """
+    if df.empty:
+        return df
+    
+    cols_to_keep = []
+    for col in df.columns:
+        # Check if column has at least one non-null, non-empty value
+        series = df[col].astype(str).str.strip().replace({'None': '', 'nan': '', '<NA>': ''})
+        if (series != '').any():
+            cols_to_keep.append(col)
+            
+    return df[cols_to_keep]
+
 # AUTO-INCREMENT HELPER
 def increment_season_string(season_str, years_to_add=1):
     season_str = str(season_str).strip()
@@ -265,6 +282,14 @@ with col_sel:
     )
     active_archive_id, active_start_year = archive_options[selected_archive_name]
 
+# SAVE SWITCH RESET LOGIC: Reset season fields when active save changes
+if "current_active_archive_id" not in st.session_state or st.session_state["current_active_archive_id"] != active_archive_id:
+    st.session_state["current_active_archive_id"] = active_archive_id
+    # Purge cached season state values so they recalculate for the active save
+    for k in list(st.session_state.keys()):
+        if k.startswith("intl_yr_") or k in ["ucl_season", "cwc_season", "b_yr", "t_season"] or k.startswith("s_"):
+            del st.session_state[k]
+
 def create_archive_cb():
     name = st.session_state.get("new_archive_name_input", "").strip()
     year = st.session_state.get("new_archive_year_input", 1998)
@@ -368,6 +393,7 @@ with p1:
         is_4yr = selected_comp in ["World Cup", "Euro", "Copa America", "AFCON", "Asian Cup", "Finalissima"]
         intl_key = f"intl_yr_{selected_comp}"
         
+        # Calculate auto-year independently per tournament
         if intl_key not in st.session_state:
             st.session_state[intl_key] = get_next_competition_year(active_archive_id, active_start_year, selected_comp, is_quadrennial=is_4yr)
             
@@ -430,13 +456,13 @@ with p1:
             intl_df['Total Titles'] = intl_df.apply(
                 lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, r['Tournament'], r['Champion'], r['id']))} Title", axis=1
             )
-            display_cols = ['Season', 'Champion', 'Total Titles']
-            if intl_df['Host'].notna().any(): display_cols.append('Host')
-            if intl_df['Runner-Up'].notna().any(): display_cols.append('Runner-Up')
-            if intl_df['3rd Place'].notna().any(): display_cols.append('3rd Place')
-            if intl_df['Score'].notna().any(): display_cols.append('Score')
+            # Re-order preferred columns
+            pref_cols = ['Season', 'Champion', 'Total Titles', 'Host', 'Runner-Up', '3rd Place', 'Score']
+            existing_cols = [c for c in pref_cols if c in intl_df.columns]
             
-            st.dataframe(intl_df[display_cols], use_container_width=True, hide_index=True)
+            # Clean dataframe: automatically drop empty/null columns
+            display_df = clean_dataframe(intl_df[existing_cols])
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
         else:
             st.info(f"No {selected_comp} results logged yet in this save.")
 
@@ -492,7 +518,8 @@ with p2:
             ucl_df['Total Titles'] = ucl_df.apply(
                 lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, 'UCL', r['Champion'], r['id']))} UCL Title", axis=1
             )
-            display_ucl = ucl_df[['Season', 'Champion', 'Runner-Up', 'Score', 'Total Titles']]
+            display_ucl = ucl_df[['Season', 'Champion', 'Total Titles', 'Runner-Up', 'Score']]
+            display_ucl = clean_dataframe(display_ucl)
             st.dataframe(display_ucl, use_container_width=True, hide_index=True)
         else:
             st.info("No Champions League results logged yet.")
@@ -552,7 +579,8 @@ with p3:
             cwc_df['Total Titles'] = cwc_df.apply(
                 lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, 'Club World Cup', r['Winner'], r['id']))} Title", axis=1
             )
-            display_cwc = cwc_df[['Year', 'Host', 'Winner', 'Runner-Up', 'Score', 'Total Titles']]
+            display_cwc = cwc_df[['Year', 'Host', 'Winner', 'Total Titles', 'Runner-Up', 'Score']]
+            display_cwc = clean_dataframe(display_cwc)
             st.dataframe(display_cwc, use_container_width=True, hide_index=True)
         else:
             st.info("No Club World Cup results logged yet.")
@@ -613,6 +641,7 @@ with p4:
                         lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, l_key, r['Champion'], r['id'], sub_cat=l_key))} Title", axis=1
                     )
                     display_dom = dom_df[['Season', 'Champion', 'Total Titles']]
+                    display_dom = clean_dataframe(display_dom)
                     st.dataframe(display_dom, use_container_width=True, hide_index=True)
                 else:
                     st.info(f"No {l_key} titles logged yet.")
@@ -677,6 +706,7 @@ with p5:
                 lambda r: f"{get_ordinal(get_total_titles_up_to(active_archive_id, b_award_name, r['Winner'], r['id']))} Win", axis=1
             )
             display_b = b_df[['Year', 'Winner', 'Positions', 'Club', 'Nation', "Total Ballon d'Ors"]]
+            display_b = clean_dataframe(display_b)
             st.dataframe(display_b, use_container_width=True, hide_index=True)
         else:
             st.info("No Ballon d'Or winners logged yet.")
@@ -723,6 +753,7 @@ with p6:
         conn.close()
         
         if not t_df.empty:
+            t_df = clean_dataframe(t_df)
             st.dataframe(t_df, use_container_width=True, hide_index=True)
         else:
             st.info("No timeline events logged yet.")
